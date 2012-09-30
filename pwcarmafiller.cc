@@ -16,7 +16,7 @@
 //# along with this program; if not, write to the Free Software
 //# Foundation, Inc., 675 Masve, Cambridge, MA 02139, USA.
 //#
-//# $Id: carmafiller.cc,v 1.31 2011/08/10 20:25:39 pteuben Exp $
+//# $Id: carmafiller.cc,v 1.30 2010/06/23 18:14:08 pteuben Exp $
 //
 
 #include <casa/aips.h>
@@ -43,17 +43,18 @@
 #include <tables/Tables.h>
 #include <tables/Tables/TableInfo.h>
 
-#include <ms/MeasurementSets.h> 
 
-#include <mirlib/maxdimc.h>
-#include <mirlib/miriad.h>
+#include <ms/MeasurementSets.h>              // Measurementset and MSColumns
+
+// Miriad interface
+#include <miriad-c/maxdimc.h>
+#include <miriad-c/miriad.h>
 
 #include <casa/namespace.h>
 
 // MIRIAD dataset MeasurementSet filler. Derived from bimafiller.
 // This version is CARMA specific, but in the end there is no
-// reason why this should be CARMA specific as they are some form
-// of MIRIAD datasets.
+// reason why this should be CARMA specific.
 //
 // For MS2 based files, see also mirfiller.g, developed by Ray
 // Plante to test the new SpectralWindow layout.
@@ -67,8 +68,6 @@
 //
 // Acknowledgement: this program was originally cloned off uvfitsfiller.cc
 //                  whose code is now in MSFitsInput.cc
-//                  Ray Plante wrote the other filler, with which we had
-//                  some cross talk
 // 
 //
 // Limitations, Caveats and Remaining ToDo's
@@ -76,6 +75,8 @@
 //    - does not apply the various (miriad) complex gain corrections
 //      (uvcat and friends should be used for that in miriad, it would be
 //      silly to duplicate that code here)
+//    - copies both the wide, window and narrow band data (or whichever is present)
+//      but can subselect via wide=,win=,narrow=
 //    - this code won't run if Double!=double or Float!=float or Int!=int
 //      On some future 64bit machines this may cause problems?
 //    - CARMA type arrays when dishes are not the same size
@@ -85,7 +86,7 @@
 //    - handle multiple array configuration datasets that were UVCAT'ed
 //      (needs to count antennae up at each array configuration)
 //    - true miriad storage manager ?
-//
+//    - read and test ATNF data (primarely a MIRIAD-UVFITS conformance test?)
 //    - check UV override, is that being handled transparently?
 //
 //    - spectral windows layout  (code present, fix table access descriptors) 
@@ -101,7 +102,7 @@
 //      files that suffer from the Table array conformance error
 
 //  History:
-//   Spring 1997:   written (cloned off uvfitsfiller)          Peter Teuben
+//   Spring 1997:   written (cloned off uvfitsfiller)       Peter Teuben
 //   July 1997:     Y2K, fixed table-interface		                PJT
 //   Dec 1997:      fixed wideband only data (e.g. uvgen)               PJT
 //   ???            somebody fixed up this code for some new release    ???
@@ -122,7 +123,7 @@
 //   Oct 2001:      mirlib changed location
 //   Sep 2009:      revived in CASA, added various tables for CARMA
 //                  also renamed from bimafiller to carmafiller
-//   Sep 2011:      initial release
+//   Jan 2010:      
 
 
 // a placeholder for the MIRIAD spectral window configuration
@@ -184,7 +185,6 @@ void show_version_info()
   cout << "   4-feb   fixed table for mode=channel cleaning\n";
   cout << "  23-feb   LSRK now default\n";
   cout << "  31-mar   TOPO->LSR conversion corrected\n";
-  cout << "  23-jun   @nrao 3 days stress testing\n";
   cout << "           ...\n";
   cout << "============================================================\n";
 }
@@ -246,7 +246,7 @@ public:
   CarmaFiller(String& infile, Int debug=0, 
 	      Bool Qtsys=False,
 	      Bool Qarrays=False,
-	      Bool Qlinecal=False);
+	      Bool Qlinecal=False, Int polmode=0);
 
   // Standard destructor
   ~CarmaFiller();
@@ -266,7 +266,7 @@ public:
   void fillObsTables();
 
   // Fill the main table by reading in all the visibilities
-  void fillMSMainTable(Bool scan);
+  void fillMSMainTable(Bool scan, Int snumbase);
 
   // Make an Antenna Table (can be called incrementally now)
   void fillAntennaTable();
@@ -342,8 +342,10 @@ private:
 
 
   // The following items more or less follow the uv variables in a dataset
-  Int    nants_p, nants_offset_p, nchan_p, nwide_p, npol_p;
+    Vector<Int> polmapping;
+    Int    nants_p, nants_offset_p, nchan_p, nwide_p, npol_p, polmode_p;
   Double antpos[3*MAXANT];
+  double longitude;
   Float  phasem1[MAXANT];
   Double ra_p, dec_p;       // current pointing center RA,DEC at EPOCH 
   Float  inttime_p;
@@ -370,7 +372,7 @@ private:
 
 // ==============================================================================================
 CarmaFiller::CarmaFiller(String& infile, Int debug, 
-			 Bool Qtsys, Bool Qarrays, Bool Qlinecal)
+			 Bool Qtsys, Bool Qarrays, Bool Qlinecal, Int polmode)
 {
   infile_p = infile;
   debug_p = debug;
@@ -380,6 +382,7 @@ CarmaFiller::CarmaFiller(String& infile, Int debug,
   Qtsys_p = Qtsys;
   Qarrays_p = Qarrays;
   Qlinecal_p = Qlinecal;
+  polmode_p = polmode;
   zero_tsys = 0;
   for (int i=0; i<MAXFIELD; i++) fcount[i] = 0;
   for (int i=0; i<MAXANT;   i++) phasem1[i] = 0.0;
@@ -451,7 +454,6 @@ void CarmaFiller::checkInput(Block<Int>& narrow, Block<Int>& window)
   Int i, nread, nwread, vlen, vupd;
   char vtype[10], vdata[64];
   Float epoch;
-  Float zero = 0.0;
 
   if (Debug(1)) cout << "CarmaFiller::checkInput" << endl;
 
@@ -460,7 +462,6 @@ void CarmaFiller::checkInput(Block<Int>& narrow, Block<Int>& window)
 
   nvis = 0;
   for (;;) {   // loop forever until happy or EOF
-
     uvread_c(uv_handle_p, preamble, data, flags, MAXCHAN, &nread);    
     if (nread <= 0) break;
     nvis++;
@@ -487,6 +488,7 @@ void CarmaFiller::checkInput(Block<Int>& narrow, Block<Int>& window)
       nants_offset_p = 0;
       uvgetvr_c(uv_handle_p,H_INT, "nants", (char *)&nants_p,1);
       uvgetvr_c(uv_handle_p,H_DBLE,"antpos",(char *)antpos,3*nants_p);
+      uvgetvr_c(uv_handle_p,H_DBLE,"longitu",(char *)&longitude,1);
       if (Debug(1)) {
 	cout << "Found " << nants_p << " antennas (first scan)" << endl;
 	for (int i=0; i<nants_p; i++) {
@@ -533,8 +535,8 @@ void CarmaFiller::checkInput(Block<Int>& narrow, Block<Int>& window)
 	project_p = "unknown";
       if (Debug(1)) cout << "Project=>" << project_p << "<=" << endl;
 
-      uvgetvr_c(uv_handle_p,H_BYTE,"version",vdata,32);
-      version_p = vdata;
+      //uvgetvr_c(uv_handle_p,H_BYTE,"version",vdata,32);
+      version_p = "hack"; //vdata;
       if (Debug(1)) cout << "Version=>" << version_p << "<=" << endl;
 
       uvgetvr_c(uv_handle_p,H_BYTE,"source",vdata,10);
@@ -543,7 +545,8 @@ void CarmaFiller::checkInput(Block<Int>& narrow, Block<Int>& window)
       // TODO: telescope will now change, so this is not a good idea
       uvgetvr_c(uv_handle_p,H_BYTE,"telescop",vdata,10);
       array_p = vdata;
-      array_p = "CARMA";
+      // array_p = "CARMA"; take that
+      array_p = "ATA";
       if (Debug(1)) cout << "First baseline=>" << array_p << "<=" << endl;
       
       // All CARMA (OVRO,BIMA,SZA) have this 
@@ -592,21 +595,19 @@ void CarmaFiller::checkInput(Block<Int>& narrow, Block<Int>& window)
       if (hexists_c(uv_handle_p,"leakage")) 
         cout << "Warning: leakage table present, but cannot apply them" << endl;
       
-      
-      if (npol_p > 1) {     // read the next npol-1 scans to find the other pols
+      if (npol_p > 1 && polmode_p == 0) {     // read the next npol-1 scans to find the other pols
 	for (i=1; i<npol_p; i++) {
 	  uvread_c(uv_handle_p, preamble, data, flags, MAXCHAN, &nread);
 	  if (nread <= 0) {
 	    ok = False;
 	    break;
 	  }
-	  if (i==1) cout << "POL(" << i << ") = " << pol_p << endl;
 	  uvgetvr_c(uv_handle_p,H_INT,"pol",(char *)&pol_p,1);        // FIX
 	  cout << "POL(" << i+1 << ") = " << pol_p << endl;
 	}
       }
       // only do one scan
-      // break;
+      break; // we only do work on the first visibility! could get max npol by brute force
     }
   }
   if (nvis == 0) {
@@ -617,33 +618,55 @@ void CarmaFiller::checkInput(Block<Int>& narrow, Block<Int>& window)
     cout << "CarmaFiller::checkInput: " << nvis << " records found" << endl;
   uvrewind_c(uv_handle_p);
 
-  Int numCorr = 1;                  // 1 polarization ?!?!
-  corrType_p.resize(numCorr); 
-  for (i=0; i < numCorr; i++) {
-    // note: 1-based ref pix
-    corrType_p(i)=pol_p;            // 1 pol !!!!
-    // convert AIPS-convention Stokes description to CASA enum
-    // CHECK if these are really the right conversions for CASA
-    if (corrType_p(i)<0) {
-      if (corrType_p(i)==-8) corrType_p(i)=Stokes::YX;
-      if (corrType_p(i)==-7) corrType_p(i)=Stokes::XY;
-      if (corrType_p(i)==-6) corrType_p(i)=Stokes::YY;
-      if (corrType_p(i)==-5) corrType_p(i)=Stokes::XX;
-      if (corrType_p(i)==-4) corrType_p(i)=Stokes::LR;
-      if (corrType_p(i)==-3) corrType_p(i)=Stokes::RL;
-      if (corrType_p(i)==-2) corrType_p(i)=Stokes::LL;
-      if (corrType_p(i)==-1) corrType_p(i)=Stokes::RR;
-    }
-  }
-  Vector<Int> tmp(numCorr); tmp=corrType_p;
-  // Sort the polarizations to standard order
-  GenSort<Int>::sort(corrType_p);
-  corrIndex_p.resize(numCorr);
-  // Get the sort indices to rearrange the data to standard order
-  for (i=0;i<numCorr;i++) {
-    for (Int j=0;j<numCorr;j++) {
-      if (corrType_p(j)==tmp(i)) corrIndex_p(i)=j;
-    }
+  int numCorr;
+
+  if (polmode_p == 0) {
+      numCorr = npol_p;
+      corrType_p.resize (numCorr);
+
+      for (i=0; i < 1; i++) {
+	  // note: 1-based ref pix
+	  corrType_p(i)=pol_p;            // 1 pol !!!!
+	  // convert AIPS-convention Stokes description to CASA enum
+	  // CHECK if these are really the right conversions for CASA
+	  if (corrType_p(i)<0) {
+	      if (corrType_p(i)==-8) corrType_p(i)=Stokes::YX;
+	      if (corrType_p(i)==-7) corrType_p(i)=Stokes::XY;
+	      if (corrType_p(i)==-6) corrType_p(i)=Stokes::YY;
+	      if (corrType_p(i)==-5) corrType_p(i)=Stokes::XX;
+	      if (corrType_p(i)==-4) corrType_p(i)=Stokes::LR;
+	      if (corrType_p(i)==-3) corrType_p(i)=Stokes::RL;
+	      if (corrType_p(i)==-2) corrType_p(i)=Stokes::LL;
+	      if (corrType_p(i)==-1) corrType_p(i)=Stokes::RR;
+	  }
+      }
+
+      Vector<Int> tmp(numCorr); tmp=corrType_p;
+      // Sort the polarizations to standard order
+      GenSort<Int>::sort(corrType_p);
+      corrIndex_p.resize(numCorr);
+      // Get the sort indices to rearrange the data to standard order
+      for (i=0;i<numCorr;i++) {
+	  for (Int j=0;j<numCorr;j++) {
+	      if (corrType_p(j)==tmp(i)) corrIndex_p(i)=j;
+	  }
+      }
+      polmapping.resize (13);
+      polmapping = 0;
+  } else if (polmode_p == 1) {
+      // Full-Stokes XY pol
+      numCorr = npol_p = 4;
+      corrType_p.resize (4);
+      corrType_p(0) = Stokes::XX;
+      corrType_p(1) = Stokes::XY;
+      corrType_p(2) = Stokes::YX;
+      corrType_p(3) = Stokes::YY;
+      polmapping.resize (13);
+      polmapping = -1;
+      polmapping(-5 + 8) = 0;
+      polmapping(-6 + 8) = 3;
+      polmapping(-7 + 8) = 1;
+      polmapping(-8 + 8) = 2;
   }
 
   // Figure out the correlation products from the polarizations
@@ -661,7 +684,7 @@ void CarmaFiller::setupMeasurementSet(const String& MSFileName, Bool useTSM)
 {
   if (Debug(1)) cout << "CarmaFiller::setupMeasurementSet" << endl;
 
-  Int nCorr = 1;        // STOKES axis: only one polarization for now, BIMA timeslices
+  Int nCorr = npol_p;   // STOKES axis
   Int nChan = nchan_p;  // we are only exporting the narrow channels to the MS
 
   nIF_p = win.nspect;   // number of spectral windows (for narrow channels only)
@@ -824,11 +847,12 @@ void CarmaFiller::setupMeasurementSet(const String& MSFileName, Bool useTSM)
 } // setupMeasurementSet()
 
 // ==============================================================================================
+#define HISTLINE 8192
 void CarmaFiller::fillObsTables()
 {
   if (Debug(1)) cout << "CarmaFiller::fillObsTables" << endl;
 
-  char hline[256];
+  char hline[HISTLINE];
   Int heof;
 
   ms_p.observation().addRow();
@@ -856,7 +880,7 @@ void CarmaFiller::fillObsTables()
   Int row=-1;
   hisopen_c(uv_handle_p,"read");
   for (;;) {
-    hisread_c(uv_handle_p,hline,256,&heof);
+    hisread_c(uv_handle_p,hline,HISTLINE,&heof);
     if (heof) break;
     ms_p.history().addRow(); 
     row++;
@@ -866,6 +890,8 @@ void CarmaFiller::fillObsTables()
     msHisCol.priority().put(row,"NORMAL");
     msHisCol.origin().put(row,"CarmaFiller::fillObsTables");
     msHisCol.application().put(row,"carmafiller");
+    Vector<String> clicmd (0);
+    msHisCol.cliCommand().put(row, clicmd);
     msHisCol.message().put(row,hline);
   }
   hisclose_c(uv_handle_p);
@@ -876,15 +902,15 @@ void CarmaFiller::fillObsTables()
 // Loop over the visibility data and fill the main table of the MeasurementSet 
 // as you find corr/wcorr's
 //
-void CarmaFiller::fillMSMainTable(Bool scan)
+void CarmaFiller::fillMSMainTable(Bool scan, Int snumbase)
 {
   if (Debug(1)) cout << "CarmaFiller::fillMSMainTable" << endl;
 
   MSColumns& msc(*msc_p);           // Get access to the MS columns, new way
-  Int nCorr = 1;                    // # stokes (1 for CARMA for now)
+  Int nCorr = npol_p;               // # stokes
   Int nChan = nchan_p;              // # channels to be written
   Int nCat  = 3;                    // # initial flagging categories (fixed at 3)
-  Int iscan = 0;
+  Int iscan = snumbase;
   Int ifield_old;
 
   Matrix<Complex> vis(nCorr,nChan);
@@ -904,7 +930,8 @@ void CarmaFiller::fillMSMainTable(Bool scan)
   nAnt_p[0]=0;
 
   receptorAngle_p.resize(1);
-  Int group, i, j, row=-1;
+  Int group, row=-1; 
+  int polsleft = 0;
   Double interval;
   Bool lastRowFlag = False;
 
@@ -912,23 +939,22 @@ void CarmaFiller::fillMSMainTable(Bool scan)
 
   if (Debug(1)) cout << "Writing " << nIF_p << " spectral windows" << endl;
 
+  int nread, nwread;
+  Int ant1, ant2;
+  Float baseline;
+  Double time;
+  Vector<Double> uvw(3);
+
   for (group=0; ; group++) {        // loop forever until end-of-file
-    int nread, nwread;
     uvread_c(uv_handle_p, preamble, data, flags, MAXCHAN, &nread);
     // cout << "UVREAD: " << data[0] << " " << data[1] << endl;
-
-    Float baseline = preamble[4];
-    Int ant1 = Int(baseline)/256;              // baseline = 256*A1 + A2
-    Int ant2 = Int(baseline) - ant1*256;       // mostly A1 <= A2
-
+    if (nread <= 0) break;          // done with reading miriad data
 
     if (Debug(9)) cout << "UVREAD: " << nread << endl;
-    if (nread <= 0) break;          // done with reading miriad data
     if (win.nspect > 0)
-        uvwread_c(uv_handle_p, wdata, wflags, MAXCHAN, &nwread);
+	uvwread_c(uv_handle_p, wdata, wflags, MAXCHAN, &nwread);
     else
         nwread=0;
-
 
     if (nread != nchan_p) {     // big trouble: data width has changed
       cout << "### Error: Narrow Channel changing from " << nchan_p <<
@@ -941,106 +967,121 @@ void CarmaFiller::fillMSMainTable(Bool scan)
       break;                    // bail out for now
     }
 
-    // get time in MJD seconds ; input was in JD
-    Double time = (preamble[3] - 2400000.5) * C::day;
-    time_p = time;
+    if (polsleft == 0) {
+	// starting a new simultaneous polarization record
+	uvrdvr_c (uv_handle_p, H_INT, "npol", (char *) &polsleft, NULL, 1);
 
-    if (Debug(3)) {                 // timeline monitoring...
-      static Double time0 = -1.0;
-      static Double dt0 = -1.0;
+	baseline = preamble[4];
+	ant1 = Int(baseline)/256;              // baseline = 256*A1 + A2
+	ant2 = Int(baseline) - ant1*256;       // mostly A1 <= A2
+
+	// get time in MJD seconds ; input was in JD
+	time = (preamble[3] - 2400000.5) * C::day;
+	time_p = time;
+
+	if (Debug(3)) {                 // timeline monitoring...
+	    static Double time0 = -1.0;
+	    static Double dt0 = -1.0;
 #if 0
-	// enforce timesteps increasing to test sorting effect 
-      if (time0 > 0)
-	time = time0 + inttime_p;
-      else
-	cout << "Warning: faking timesorted data" << endl;
+	    // enforce timesteps increasing to test sorting effect 
+	    if (time0 > 0)
+		time = time0 + inttime_p;
+	    else
+		cout << "Warning: faking timesorted data" << endl;
 #endif
 
-      MVTime mjd_date(time/C::day);
-      mjd_date.setFormat(MVTime::FITS);
-      cout << "DATE=" << mjd_date ;
-      if (time0 > 0) {
-	if (time - time0 < 0) {
-	  cout << " BACKWARDS";
-	  dt0 = time - time0;
+	    MVTime mjd_date(time/C::day);
+	    mjd_date.setFormat(MVTime::FITS);
+	    cout << "DATE=" << mjd_date ;
+	    if (time0 > 0) {
+		if (time - time0 < 0) {
+		    cout << " BACKWARDS";
+		    dt0 = time - time0;
+		}
+	    }
+	    if (dt0 > 0) {
+		if ( (time-time0) > 5*dt0) {
+		    cout << " FORWARDS";
+		    dt0 = time - time0;
+		}
+	    } else
+		dt0 = time-time0;
+	    time0 = time;
+	    cout << endl;
+	} // Debug(3) for timeline monitoring
+	
+	interval = inttime_p;
+	//msc.interval().put(0,interval);
+	//msc.exposure().put(0,interval);
+
+	// for MIRIAD, this would always cause a single array dataset,
+	// but we need to count the antpos occurences to find out
+	// which array configuration we're in.
+	
+	if (uvupdate_c(uv_handle_p)) {       // aha, something important changed
+	    if (Debug(4)) {
+		cout << "Record " << group+1 << " uvupdate" << endl;
+	    }
+	    Tracking(group);
+	} else {
+	    if (Debug(5)) cout << "Record " << group << endl;
 	}
-      }
-      if (dt0 > 0) {
-	if ( (time-time0) > 5*dt0) {
-	  cout << " FORWARDS";
-	  dt0 = time - time0;
+
+	//  nAnt_p.resize(array+1);
+	//  receptorAngle_p.resize(array+1);
+
+	nAnt_p[nArray_p-1] = max(nAnt_p[nArray_p-1],ant1);   // for MIRIAD, and also 
+	nAnt_p[nArray_p-1] = max(nAnt_p[nArray_p-1],ant2);
+	ant1--; ant2--;                                      // make them 0-based for CASA
+
+	ant1 += nants_offset_p;     // correct for different array offsets
+	ant2 += nants_offset_p;
+
+	// should ant1 and ant2 be offset with (nArray_p-1)*nant_p ???
+	// in case there are multiple arrays???
+	// TODO: code should just assuming single array
+    
+	uvw(0) = -preamble[0] * 1e-9; // convert to seconds
+	uvw(1) = -preamble[1] * 1e-9; // MIRIAD uses nanosec
+	uvw(2) = -preamble[2] * 1e-9; // note - sign (CASA vs. MIRIAD convention)
+	uvw   *= C::c;                // Finally convert to meters for CASA
+
+	if (group==0 && Debug(1)) {
+	    cout << "### First record: " << endl;
+	    cout << "### Preamble: " << preamble[0] << " " <<
+		preamble[1] << " " <<
+		preamble[2] << " nanosec.(MIRIAD convention)" << endl;
+	    cout << "### uvw: " << uvw(0) << " " <<
+		uvw(1) << " " <<
+		uvw(2) << " meter. (CASA convention)" << endl;
 	}
-      } else
-	dt0 = time-time0;
-      time0 = time;
-      cout << endl;
-    } // Debug(3) for timeline monitoring
 
-    interval = inttime_p;
-    //msc.interval().put(0,interval);
-    //msc.exposure().put(0,interval);
-
-
-    // for MIRIAD, this would always cause a single array dataset,
-    // but we need to count the antpos occurences to find out
-    // which array configuration we're in.
-
-    if (uvupdate_c(uv_handle_p)) {       // aha, something important changed
-        if (Debug(4)) {
-            cout << "Record " << group+1 << " uvupdate" << endl;
-        }
-        Tracking(group);
-    } else {
-        if (Debug(5)) cout << "Record " << group << endl;
+	flag = 1; // clear all, in case current npol != nCorr
+	vis = 0;
     }
+
+    int mirpol;
+    Int casapolidx;
+    uvrdvr_c (uv_handle_p, H_INT, "pol", (char *) &mirpol, NULL, 1);
+    casapolidx = polmapping (mirpol + 8);
+
+    if (casapolidx < 0)
+	throw AipsError ("CarmaFiller: unexpected MIRIAD polarization " + mirpol);
 
     // now that phasem1 has been loaded, apply linelength, if needed
     if (Qlinecal_p) {
-      linecal(nread,data,phasem1[ant1-1],phasem1[ant2-1]);
-      // linecal(nwread,wdata,phasem1[ant1-1],phasem1[ant2-1]);
+	linecal(nread,data,phasem1[ant1-1],phasem1[ant2-1]);
+	// linecal(nwread,wdata,phasem1[ant1-1],phasem1[ant2-1]);
     }
-
-    //  nAnt_p.resize(array+1);
-    //  receptorAngle_p.resize(array+1);
-
-    nAnt_p[nArray_p-1] = max(nAnt_p[nArray_p-1],ant1);   // for MIRIAD, and also 
-    nAnt_p[nArray_p-1] = max(nAnt_p[nArray_p-1],ant2);
-    ant1--; ant2--;                                      // make them 0-based for CASA
-
-    ant1 += nants_offset_p;     // correct for different array offsets
-    ant2 += nants_offset_p;
-
-
-    // should ant1 and ant2 be offset with (nArray_p-1)*nant_p ???
-    // in case there are multiple arrays???
-    // TODO: code should just assuming single array
-    
-    Int count = 0;                // index into data[] array
-    Vector<Double> uvw(3);
-    uvw(0) = -preamble[0] * 1e-9; // convert to seconds
-    uvw(1) = -preamble[1] * 1e-9; // MIRIAD uses nanosec
-    uvw(2) = -preamble[2] * 1e-9; // note - sign (CASA vs. MIRIAD convention)
-    uvw   *= C::c;                // Finally convert to meters for CASA
-
-    if (group==0 && Debug(1)) {
-        cout << "### First record: " << endl;
-        cout << "### Preamble: " << preamble[0] << " " <<
-                                preamble[1] << " " <<
-                                preamble[2] << " nanosec.(MIRIAD convention)" << endl;
-        cout << "### uvw: " << uvw(0) << " " <<
-                               uvw(1) << " " <<
-                               uvw(2) << " meter. (CASA convention)" << endl;
-    }
-
 
     // first construct the data (vis & flag) in a single long array
     // containing all spectral windows
     // In the (optional) loop over all spectral windows, subsets of
     // these arrays will be written out
 
-    for (Int chan=0; chan<nChan; chan++) {
-      for (Int pol=0; pol<nCorr; pol++) {
+    Int count = 0;                // index into data[] array
 
+    for (Int chan=0; chan<nChan; chan++) {
 	// miriad uses bl=ant1-ant2, FITS/AIPS/CASA use bl=ant2-ant1
 	// apart from using -(UVW)'s, the visib need to be conjugated as well
 	Bool  visFlag =  (flags[count/2] == 0) ? False : True;
@@ -1051,103 +1092,109 @@ void CarmaFiller::fillMSMainTable(Bool scan)
 	
 	// check flags array !! need separate counter (count/2)
 
-	flag(pol,chan) = (wt<=0); 
-	vis(pol,chan) = Complex(visReal,visImag);
-      } // pol
+	flag(casapolidx,chan) = (wt<=0); 
+	vis(casapolidx,chan) = Complex(visReal,visImag);
     } // chan
 
+    polsleft--;
 
-    for (Int ifno=0; ifno < nIF_p; ifno++) {
-      if (win.keep[ifno]==0) continue;    
-      // IFs go to separate rows in the MS, pol's do not!
-      ms_p.addRow(); 
-      row++;
+    if (polsleft == 0 && !allTrue (flag)) {
+	// done with this set of simultaneous pols, and not all flagged.
 
-      // first fill in values for all the unused columns
-      if (row==0) {
-	ifield_old = ifield;
-	msc.feed1().put(row,0);
-	msc.feed2().put(row,0);
-	msc.flagRow().put(row,False);
-	lastRowFlag = False;
-	msc.scanNumber().put(row,iscan);
-	msc.processorId().put(row,-1);
-	msc.observationId().put(row,0);
-	msc.stateId().put(row,-1);
-	if (!Qtsys_p) {
-	  Vector<Float> tmp(nCorr); tmp=1.0;
-	  msc.weight().put(row,tmp);
-	  msc.sigma().put(row,tmp);
-	}
-      }
-      msc.exposure().put(row,interval);
-      msc.interval().put(row,interval);
+	for (Int ifno=0; ifno < nIF_p; ifno++) {
+	    if (win.keep[ifno]==0) continue;    
+	    // IFs go to separate rows in the MS, pol's do not!
+	    ms_p.addRow(); 
+	    row++;
+
+	    // first fill in values for all the unused columns
+	    if (row==0) {
+		ifield_old = ifield;
+		msc.feed1().put(row,0);
+		msc.feed2().put(row,0);
+		msc.flagRow().put(row,False);
+		lastRowFlag = False;
+		msc.scanNumber().put(row,iscan);
+		msc.processorId().put(row,-1);
+		msc.observationId().put(row,0);
+		msc.stateId().put(row,-1);
+		if (!Qtsys_p) {
+		    Vector<Float> tmp(nCorr); tmp=1.0;
+		    msc.weight().put(row,tmp);
+		    msc.sigma().put(row,tmp);
+		}
+	    }
+	    msc.exposure().put(row,interval);
+	    msc.interval().put(row,interval);
 #if 1
-      // the dumb way: e.g. 3" -> 20" for 3c273
-      Matrix<Complex> tvis(nCorr,win.nschan[ifno]);
-      Cube<Bool> tflagCat(nCorr,win.nschan[ifno],nCat,False);  
-      Matrix<Bool> tflag = tflagCat.xyPlane(0); // references flagCat's storage
-      
-      Int woffset = win.ischan[ifno]-1;
-      Int wsize   = win.nschan[ifno];
-      for (Int i=0; i< wsize; i++) {
-	tvis(0,i) = vis(0,i+woffset);
-	tflag(0,i) = flag(0,i+woffset);
-      }
+	    // the dumb way: e.g. 3" -> 20" for 3c273
+	    Matrix<Complex> tvis(nCorr,win.nschan[ifno]);
+	    Cube<Bool> tflagCat(nCorr,win.nschan[ifno],nCat,False);  
+	    Matrix<Bool> tflag = tflagCat.xyPlane(0); // references flagCat's storage
+	    
+	    Int woffset = win.ischan[ifno]-1;
+	    Int wsize   = win.nschan[ifno];
+	    for (int j = 0; j < nCorr; j++) {
+		for (Int i=0; i< wsize; i++) {
+		    tvis(j,i) = vis(j,i+woffset);
+		    tflag(j,i) = flag(j,i+woffset);
+		}
+	    }
 #else
-      // the 'smart' way,  using IPositions (still 20"....)
-      IPosition blc(2,0,0);
-      IPosition trc(2,nCorr-1,win.nschan[ifno]-1);
-      IPosition offset(2,0,win.ischan[ifno]-1);
-      Matrix<Complex> tvis(nCorr,win.nschan[ifno]);
-      Cube<Bool> tflagCat(nCorr,win.nschan[ifno],nCat,False);  
-      Matrix<Bool> tflag = tflagCat.xyPlane(0); // references flagCat's storage
-      
-      tvis(blc,trc) = vis(blc+offset,trc+offset);
-      tflag(blc,trc) = flag(blc+offset,trc+offset);
+	    // the 'smart' way,  using IPositions (still 20"....)
+	    IPosition blc(2,0,0);
+	    IPosition trc(2,nCorr-1,win.nschan[ifno]-1);
+	    IPosition offset(2,0,win.ischan[ifno]-1);
+	    Matrix<Complex> tvis(nCorr,win.nschan[ifno]);
+	    Cube<Bool> tflagCat(nCorr,win.nschan[ifno],nCat,False);  
+	    Matrix<Bool> tflag = tflagCat.xyPlane(0); // references flagCat's storage
+	    
+	    tvis(blc,trc) = vis(blc+offset,trc+offset);
+	    tflag(blc,trc) = flag(blc+offset,trc+offset);
 #endif
-      msc.data().put(row,tvis);
-      msc.flag().put(row,tflag);
-      msc.flagCategory().put(row,tflagCat);
+	    msc.data().put(row,tvis);
+	    msc.flag().put(row,tflag);
+	    msc.flagCategory().put(row,tflagCat);
+	    
+	    Bool rowFlag = allEQ(flag,True);
+	    if (rowFlag != lastRowFlag) {
+		msc.flagRow().put(row,rowFlag);
+		lastRowFlag = rowFlag;
+	    }
 
-      Bool rowFlag = allEQ(flag,True);
-      if (rowFlag != lastRowFlag) {
-	msc.flagRow().put(row,rowFlag);
-	lastRowFlag = rowFlag;
-      }
-
-      msc.antenna1().put(row,ant1);
-      msc.antenna2().put(row,ant2);
-      msc.time().put(row,time);           // CARMA did begin of scan.., now middle (2009)
-      msc.timeCentroid().put(row,time);   // do we really need this ? flagging/blanking ?
-      if (Qtsys_p) {	
-	// Vector<Float> w1(nCorr), w2(nCorr);
-	w2 = 1.0;   // i use this as a 'version' id  to test FC refresh bugs :-)
-	if( systemp[ant1] == 0 || systemp[ant2] == 0) {
-	  zero_tsys++;
-	  w1 = 0.0;
-	} else
-	  w1 = 1.0/(systemp[ant1]*systemp[ant2]);  // see uvio::uvinfo_variance()
-	if (Debug(1)) cout << w1 << " " << w2 << endl;
-	msc.weight().put(row,w1);
-	msc.sigma().put(row,w2);	
-      }
-      msc.uvw().put(row,uvw);
-      msc.arrayId().put(row,nArray_p-1);
-      msc.dataDescId().put(row,ifno);
-      msc.fieldId().put(row,ifield);
-
+	    msc.antenna1().put(row,ant1);
+	    msc.antenna2().put(row,ant2);
+	    msc.time().put(row,time);           // CARMA did begin of scan.., now middle (2009)
+	    msc.timeCentroid().put(row,time);   // do we really need this ? flagging/blanking ?
+	    if (Qtsys_p) {	
+		// Vector<Float> w1(nCorr), w2(nCorr);
+		w2 = 1.0;   // i use this as a 'version' id  to test FC refresh bugs :-)
+		if( systemp[ant1] == 0 || systemp[ant2] == 0) {
+		    zero_tsys++;
+		    w1 = 0.0;
+		} else
+		    w1 = 1.0/sqrt((double)(systemp[ant1]*systemp[ant2]));
+		if (Debug(1)) cout << w1 << " " << w2 << endl;
+		msc.weight().put(row,w1);
+		msc.sigma().put(row,w2);	
+	    }
+	    msc.uvw().put(row,uvw);
+	    msc.arrayId().put(row,nArray_p-1);
+	    msc.dataDescId().put(row,ifno);
+	    msc.fieldId().put(row,ifield);
 
 #if 1
-      // TODO: SCAN_NUMBER needs to be added, they are all 0 now
-      if (ifield_old != ifield) 
-	iscan++;
-      ifield_old = ifield;
-      msc.scanNumber().put(row,iscan);
+	    // TODO: SCAN_NUMBER needs to be added, they are all 0 now
+	    if (ifield_old != ifield) 
+		iscan++;
+	    ifield_old = ifield;
+	    msc.scanNumber().put(row,iscan);
 #endif
+	}  // ifNo
 
-    }  // ifNo
-    fcount[ifield]++;
+	fcount[ifield]++;
+    }
+
   } // for(grou) : loop over all visibilities
   show();
 
@@ -1208,6 +1255,11 @@ void CarmaFiller::fillAntennaTable()
     arrayXYZ_p(0) = -2523862.04;
     arrayXYZ_p(1) = -4123592.80;
     arrayXYZ_p(2) =  4147750.37;
+  } else if (array_p == "ATA") {
+      // ie same as hatcreek / bima -- correct ?????
+    arrayXYZ_p(0) = -2523862.04;
+    arrayXYZ_p(1) = -4123592.80;
+    arrayXYZ_p(2) =  4147750.37;
   } else if (array_p == "ATCA") {
     arrayXYZ_p(0) = -4750915.84;
     arrayXYZ_p(1) =  2792906.18;
@@ -1239,6 +1291,7 @@ void CarmaFiller::fillAntennaTable()
   if (array_p=="ATCA")     diameter=22;     //# only at 'low' freq !!
   if (array_p=="HATCREEK") diameter=6;
   if (array_p=="BIMA")     diameter=6;
+  if (array_p=="ATA")      diameter=6.1;
   if (array_p=="CARMA")    diameter=8;
   if (array_p=="OVRO")     diameter=10;
 
@@ -1252,6 +1305,8 @@ void CarmaFiller::fillAntennaTable()
     cout << "Hurray, CARMA data; version " << version_p << " with " << nAnt << " antennas" << endl;
   } else
     cout << "Ant configuration not supported yet" << endl;
+
+  Matrix<Double> posRot = Rot3D (2, longitude);
 
   MSAntennaColumns& ant(msc_p->antenna());
   Vector<Double> antXYZ(3);
@@ -1271,13 +1326,15 @@ void CarmaFiller::fillAntennaTable()
     ms_p.antenna().addRow(); 
     row++;
 
-    if (i<6)
+    /*if (i<6)
       ant.dishDiameter().put(row,10.4);  // OVRO
     else if (i<15)
       ant.dishDiameter().put(row,6.1);   // BIMA or HATCREEK
     else
       ant.dishDiameter().put(row,3.5);   // SZA
-    
+    */
+    ant.dishDiameter().put(row, diameter);
+
     antXYZ(0) = antpos[i];              //# these are now in nano-sec
     antXYZ(1) = antpos[i+nAnt];
     antXYZ(2) = antpos[i+nAnt*2];
@@ -1296,27 +1353,18 @@ void CarmaFiller::fillAntennaTable()
     }
     ant.mount().put(row,mount);
     ant.flagRow().put(row,False);
-    ant.name().put(row,"C" + String::toString(i+1));
-    ant.station().put(row,"ANT" + String::toString(i+1));  // unknown PADs, so for now ANT#
+    ant.name().put(row,String::toString(i+1));
+    ant.station().put(row,"ANT" + String::toString(i+1));
+    // ant.name().put(row,"ANT" + String::toString(i+1));
+    // ant.station().put(row,"UNKNOWN");	// station names unknown at HatCreek (miriad really)
     ant.type().put(row,"GROUND-BASED");
 
     Vector<Double> offsets(3);
     offsets=0.0; 
     // store absolute positions, with all offsets 0
 
-#if 1
-    // from MirFiller; but why we're rotating this?
-    Double carmaLong = atan2(arrayXYZ_p(1),arrayXYZ_p(0));
-    Matrix<Double> posRot = Rot3D(2,carmaLong);
     antXYZ = product(posRot,antXYZ);
-#endif
-
-#if 1
-    ant.position().put(row,arrayXYZ_p+antXYZ);
-#else
-    //test
-    ant.position().put(row,arrayXYZ_p);
-#endif
+    ant.position().put(row, antXYZ + arrayXYZ_p);
     ant.offset().put(row,offsets);
 
     // store the angle for use in the feed table
@@ -1337,8 +1385,8 @@ void CarmaFiller::fillAntennaTable()
 
   // store these items in non-standard keywords for now
   // 
-  String arrnam = "CARMA";   // for now only "support" CARMA data
-  ant.name().rwKeywordSet().define("ARRAY_NAME",arrnam);
+  //String arrnam = "CARMA";   // for now only "support" CARMA data
+  ant.name().rwKeywordSet().define("ARRAY_NAME",array_p);
   ant.position().rwKeywordSet().define("ARRAY_POSITION",arrayXYZ_p);
 
 
@@ -1402,11 +1450,7 @@ void CarmaFiller::fillSpectralWindowTable(Bool use_lsrk)
   MSPolarizationColumns&  msPol(msc_p->polarization());
   MSDopplerColumns&       msDop(msc_p->doppler());
 
-  Int iFreq = 0;
-  Int nChan = nchan_p + nwide_p;
-  Int nCorr = 1;            // only 1 polarization 
-  Int iChan;
-  Int spw=0;
+  Int nCorr = npol_p;
   Int i, j, side;
   Double BW = 0.0;
 
@@ -1620,63 +1664,50 @@ void CarmaFiller::fillSourceTable()
   //String key("MEASURE_REFERENCE");
   //msSource.restFrequency().rwKeywordSet().define(key,"REST");
 
-  cout << "CarmaFiller::fillSourceTable() querying " << source_p.nelements() << " sources" << endl;
-  cout << source_p << endl;
-  
+  // cout << "CarmaFiller::fillSourceTable() adding " << source_p.nelements() << " sources" << endl;
 
   // 
-  for (Int src=0; src < source_p.nelements(); src++) {
+  for (uInt src=0; src < source_p.nelements(); src++) {
 
-    skip = 0;
-    for (Int i=0; i<src; i++) {               // loop over sources to avoid duplicates
-      if (source_p[i] == source_p[src]) {
+    skip = 0;                             // check not to duplicate source names
+    for (uInt i=0; i<src; i++) {
+      if (source_p[src] == source_p[i]) {
 	skip=1;
 	break;
       }
     }
+    if (skip) break;
 
-    cout << "source : " << source_p[src] << " " << skip << endl;
-
-    if (skip) continue;    // if seen before, don't add it again
-
-    // the side effect of this long source_p array with duplicate names
-    // is that the source index can be e.g. 0,1,3,4,5 depending on how
-    // this reader encountered them first in the scans.
-
+    ns++;
     ms_p.source().addRow();
 
     radec(0) = ras_p[src];
     radec(1) = decs_p[src];
 
-    msSource.sourceId().put(ns,src);
-    msSource.name().put(ns,source_p[src]);
+    msSource.sourceId().put(src,src);
+    msSource.name().put(src,source_p[src]);
     //    msSource.spectralWindowId().put(src,-1);     // really valid for all ??
-    msSource.spectralWindowId().put(ns,0);     // FIX it due to a bug in MS2 code (6feb2001)
+    msSource.spectralWindowId().put(src,0);     // FIX it due to a bug in MS2 code (6feb2001)
     // msSource.spectralWindowId().put(src,-1); // valid for all?
-    msSource.direction().put(ns,radec);
+    msSource.direction().put(src,radec);
     if (n > 0) {
       Int m=n;
-      // cout << "TESTING numlines=" << m << endl;
+      cout << "TESTING numlines=" << m << endl;
       Vector<Double> restFreq(m);
       for (Int i=0; i<m; i++)
 	restFreq(i) = win.restfreq[i] * 1e9;    // convert from GHz to Hz
 
-      msSource.numLines().put(ns,win.nspect);
-      msSource.restFrequency().put(ns,restFreq);
+      msSource.numLines().put(src,win.nspect);
+      msSource.restFrequency().put(src,restFreq);
     }
-    msSource.time().put(ns,0.0);               // valid for all times
-    msSource.interval().put(ns,0);             // valid forever
+    msSource.time().put(src,0.0);               // valid for all times
+    msSource.interval().put(src,0);             // valid forever
 
     // TODO?
     // missing position/sysvel/transition in the produced MS/SOURCE sub-table ??
 
-    // listobs complains:
-    // No systemic velocity information found in SOURCE table.
-
-    ns++;
   }
 
-  // TODO:  #sources wrong if you take raw miriad before noise taken out
   cout << "CarmaFiller::fillSourceTable() added " << ns << " sources" << endl;
 }
 
@@ -1767,7 +1798,7 @@ void CarmaFiller::Tracking(int record)
   if (Debug(3)) cout << "CarmaFiller::Tracking" << endl;
 
   char vtype[10], vdata[10];
-  int vlen, vupd, idat, vupd1, vupd2, i, j, k;
+  int vlen, vupd, vupd1, vupd2, i, j, k;
   //  float dx, dy;
   //  Float rdat;
   //  Double ddat;
@@ -1788,7 +1819,6 @@ void CarmaFiller::Tracking(int record)
     uvtrack_c(uv_handle_p,"wwidth","u");
 
     uvtrack_c(uv_handle_p,"antpos","u");   // array's
-    uvtrack_c(uv_handle_p,"pol","u");      // pol's
     uvtrack_c(uv_handle_p,"dra","u");      // fields
     uvtrack_c(uv_handle_p,"ddec","u");     // fields
 
@@ -1811,21 +1841,6 @@ void CarmaFiller::Tracking(int record)
   }
 
   // here is all the special tracking code...
-
-  uvprobvr_c(uv_handle_p,"pol",vtype,&vlen,&vupd);
-  if (vupd && npol_p==1) {
-    uvrdvr_c(uv_handle_p,H_INT,"pol",(char *)&idat, NULL, 1);
-    if (idat != pol_p)
-        cout << "Warning: polarization changed to " << pol_p << endl;
-    pol_p = idat;
-  }
-
-  uvprobvr_c(uv_handle_p,"npol",vtype,&vlen,&vupd);
-  if (vupd) {
-    uvrdvr_c(uv_handle_p,H_INT,"npol",(char *)&idat, NULL, 1);
-    if (idat != npol_p)
-      throw(AipsError("Cannot handle a changing npol yet"));
-  }
 
   uvprobvr_c(uv_handle_p,"inttime",vtype,&vlen,&vupd);
   if (vupd) {
@@ -1883,17 +1898,15 @@ void CarmaFiller::Tracking(int record)
     }
   }
 
-  // Go after a new pointing (where {source,ra,dec} was changed)
   // SOURCE and DRA/DDEC are mixed together they define a row in the FIELD table
-  // so we need to build a field index here as well
 
   uvprobvr_c(uv_handle_p,"source",vtype,&vlen,&vupd);
   if (vupd) {
     uvgetvr_c(uv_handle_p,H_BYTE,"source",vdata,10);
     object_p = vdata;  
 
-    // note: as is, source_p will get repeated values, trim it later  (bug?)
-    cout << "new source: " << object_p << endl;
+
+    // bug: as is, source_p will get repeated values, trim it later
 
     source_p.resize(source_p.nelements()+1, True);     // need to copy the old values
     source_p[source_p.nelements()-1] = object_p;
@@ -1901,11 +1914,14 @@ void CarmaFiller::Tracking(int record)
     ras_p.resize(ras_p.nelements()+1, True);     
     decs_p.resize(decs_p.nelements()+1, True);   
     ras_p[ras_p.nelements()-1] = 0.0;                  // if no source at (0,0) offset
-    decs_p[decs_p.nelements()-1] = 0.0;                // these would never be initialized  
+    decs_p[decs_p.nelements()-1] = 0.0;                // these would never be initialized 
+    
 
-    uvgetvr_c(uv_handle_p,H_BYTE,"purpose",vdata,10);
+    //uvgetvr_c(uv_handle_p,H_BYTE,"purpose",vdata,10);
+    vdata[0] = 'S'; vdata[1] = '\0';
     purpose_p.resize(purpose_p.nelements()+1, True);   // need to copy the old values
     purpose_p[purpose_p.nelements()-1] = vdata;
+
   }
 
   uvprobvr_c(uv_handle_p,"dra", vtype,&vlen,&vupd1);
@@ -1915,13 +1931,14 @@ void CarmaFiller::Tracking(int record)
     npoint++;
     uvgetvr_c(uv_handle_p,H_DBLE,"ra", (char *)&ra_p, 1);
     uvgetvr_c(uv_handle_p,H_DBLE,"dec",(char *)&dec_p,1);
-    uvgetvr_c(uv_handle_p,H_REAL,"dra", (char *)&dra_p,  1);
-    uvgetvr_c(uv_handle_p,H_REAL,"ddec",(char *)&ddec_p, 1);
+    //uvgetvr_c(uv_handle_p,H_REAL,"dra", (char *)&dra_p,  1);
+    //uvgetvr_c(uv_handle_p,H_REAL,"ddec",(char *)&ddec_p, 1);
+    dra_p = ddec_p = 0.;
     uvgetvr_c(uv_handle_p,H_BYTE,"source",vdata,10);
     object_p = vdata;  // also track object name whenever changed
 
 
-    for (i=0, j=-1; i<source_p.nelements(); i++) {    // find first matching source name
+    for (i=0, j=-1; i<source_p.nelements(); i++) {
       if (source_p[i] == object_p) {
 	j = i ;
 	break;
@@ -1936,7 +1953,6 @@ void CarmaFiller::Tracking(int record)
       } 
     }
     // k could be -1, when a new field/source is found
-    // else it is >=0 and the index into the field array
 
     if (Debug(1)) {
       cout << "POINTING: " << npoint 
@@ -1948,7 +1964,7 @@ void CarmaFiller::Tracking(int record)
       ifield = nfield;
       nfield++;
       if (Debug(2)) cout << "Adding new field " << ifield 
-			 << " for " << object_p << " " << source_p[j] 
+			 << " for " << object_p << source_p[j] 
 			 << " at " 
 			 << dra_p *206264.8062 << " " 
 			 << ddec_p*206264.8062 << " arcsec." << endl;
@@ -2071,11 +2087,13 @@ void CarmaFiller::init_window(Block<Int>& narrow, Block<Int>& window)
     // but there's no way to check how select=win() was used...
     // also, if you've used uvcat options=nowide, nwide=0 and nspect non-zero.
     // we really don't care about the wide bands anymore
+      /*
     if (nwide < nspect)
       throw(AipsError("nspect != nwide"));
     else {
       nwide = nspect;
     }
+      */
   }
 
   for (i=0; i<nspect; i++) {
@@ -2179,7 +2197,7 @@ int main(int argc, char **argv)
     
     // Define inputs
     Input inp(1);
-    inp.version("3 - CARMA to MS filler (14-oct-2011) PJT)");
+    inp.version("3 - CARMA to MS filler (18-jun-2010) PJT)");
     inp.create("vis",     "",        "Name of CARMA dataset name",         "string");    
     inp.create("ms",      "",        "Name of MeasurementSet",             "string");    
     inp.create("useTSM",  "True",    "Use the TiledStorageManager",        "bool");        
@@ -2189,6 +2207,8 @@ int main(int argc, char **argv)
     inp.create("tsys",    "False",   "Fill WEIGHT from Tsys in data?",     "bool");
     inp.create("arrays",  "False",   "DEBUG: Split multiple arrays?",      "bool");
     inp.create("lsrk",    "True",    "Use LSRK (instead of LSRD)?",        "bool");
+    inp.create("polmode", "0",       "0 = single pol; 1 = Full XY",        "int");
+    inp.create("snumbase","0",       "Starting SCAN_NUMBER value",         "int");
     inp.readArguments(argc, argv);
 
     String vis(inp.getString("vis"));
@@ -2203,6 +2223,8 @@ int main(int argc, char **argv)
     Bool Qarrays =  inp.getBool("arrays");      // debug
     Bool Qlinecal = inp.getBool("linecal");     // 
     Bool Qlsrk    = inp.getBool("lsrk");        // LSRK or LSRD
+    Int  polmode  = inp.getInt("polmode");
+    Int  snumbase = inp.getInt("snumbase");
 
     File t(vis);                                // only used for sanity checks
     Int i, debug = -1;
@@ -2230,7 +2252,7 @@ int main(int argc, char **argv)
     } else
       win = inp.getIntArray("win");
 
-    CarmaFiller bf(vis,debug,Qtsys,Qarrays,Qlinecal);
+    CarmaFiller bf(vis,debug,Qtsys,Qarrays,Qlinecal,polmode);
 
     bf.checkInput(narrow,win);
     bf.setupMeasurementSet(ms,useTSM);
@@ -2239,7 +2261,7 @@ int main(int argc, char **argv)
 
 
     // fill the main table
-    bf.fillMSMainTable(True);        // first scan it
+    bf.fillMSMainTable(True, snumbase);        // first scan it
     //    bf.fillMSMainTable(False);  // then fill it
 
 
@@ -2254,7 +2276,7 @@ int main(int argc, char **argv)
     cout << "CarmaFiller::close()  Created MeasurementSet " << ms << endl;
   } 
   catch (AipsError x) {
-    cerr << "AiprError" << x.getMesg() << endl;
+      cerr << x.getMesg() << endl;
   } 
 
   cout << "CarmaFiller::END" << endl;
