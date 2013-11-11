@@ -136,7 +136,6 @@ private:
     Int nants_p, nants_offset_p, nchan_p, nwide_p, npol_p, polmode_p;
     Double antpos[3*MAXANT];
     double longitude;
-    Float phasem1[MAXANT];
     Double ra_p, dec_p;       // current pointing center RA,DEC at EPOCH
     Float inttime_p;
     Double freq_p;            // rest frequency of the primary line
@@ -169,8 +168,6 @@ CarmaFiller::CarmaFiller (String& infile, Int debug, Bool Qtsys, Bool Qarrays, I
 
     for (int i = 0; i < MAXFIELD; i++)
 	fcount[i] = 0;
-    for (int i = 0; i < MAXANT; i++)
-	phasem1[i] = 0.0;
 
     if (sizeof (double) != sizeof (Double))
 	cout << "Double != double; carmafiller will probably fail" << endl;
