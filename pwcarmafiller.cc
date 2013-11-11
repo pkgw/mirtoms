@@ -100,7 +100,6 @@ public:
 
     void Tracking (int record);
     void init_window (Block<Int>& narrow, Block<Int>& window);
-    void Warning (char *msg);
 
 private:
     String infile_p;
@@ -192,11 +191,6 @@ CarmaFiller::CarmaFiller (String& infile, Int debug, Bool Qtsys, Bool Qarrays, I
   Tracking(-1);
 }
 
-
-void CarmaFiller::Warning(char *msg)
-{
-  cout << "### Warning: " << msg <<  endl;
-}
 
 Bool CarmaFiller::Debug(int level)
 {
