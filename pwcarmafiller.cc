@@ -85,7 +85,7 @@ public:
     void checkInput (Block<Int>& narrow, Block<Int>& window);
     Bool Debug (int level);
 
-    void setupMeasurementSet (const String& MSFileName, Bool useTSM);
+    void setupMeasurementSet (const String& MSFileName);
 
     void fillObsTables ();
     void fillMSMainTable (Bool scan, Int snumbase);
@@ -413,7 +413,7 @@ void CarmaFiller::checkInput(Block<Int>& narrow, Block<Int>& window)
 }
 
 
-void CarmaFiller::setupMeasurementSet(const String& MSFileName, Bool useTSM)
+void CarmaFiller::setupMeasurementSet(const String& MSFileName)
 {
   if (Debug(1)) cout << "CarmaFiller::setupMeasurementSet" << endl;
 
@@ -429,14 +429,12 @@ void CarmaFiller::setupMeasurementSet(const String& MSFileName, Bool useTSM)
   td.removeColumn(MS::columnName(MS::FLAG));
   MS::addColumnToDesc(td, MS::FLAG,2);
 
-  if (useTSM) {
-    td.defineHypercolumn("TiledData",3,
-			 stringToVector(MS::columnName(MS::DATA)));
-    td.defineHypercolumn("TiledFlag",3,
-			 stringToVector(MS::columnName(MS::FLAG)));
-    td.defineHypercolumn("TiledUVW",2,
-			 stringToVector(MS::columnName(MS::UVW)));
-  }
+  td.defineHypercolumn("TiledData",3,
+		       stringToVector(MS::columnName(MS::DATA)));
+  td.defineHypercolumn("TiledFlag",3,
+		       stringToVector(MS::columnName(MS::FLAG)));
+  td.defineHypercolumn("TiledUVW",2,
+		       stringToVector(MS::columnName(MS::UVW)));
 
   if (Debug(1))  cout << "Creating MS=" << MSFileName  << endl;
   SetupNewTable newtab(MSFileName, td, Table::New);
@@ -448,30 +446,25 @@ void CarmaFiller::setupMeasurementSet(const String& MSFileName, Bool useTSM)
   StandardStMan aipsStMan;  // these are more efficient now
 
 
-  if (useTSM) {
-    Int tileSize=nChan/10+1;
+  Int tileSize = nChan / 10 + 1;
 
-    TiledShapeStMan tiledStMan1("TiledData",
-				 IPosition(3,nCorr,tileSize,
-					   16384/nCorr/tileSize));
-    TiledShapeStMan tiledStMan1f("TiledFlag",
-				 IPosition(3,nCorr,tileSize,
-					   16384/nCorr/tileSize));
-    TiledShapeStMan tiledStMan2("TiledWeight",
-				 IPosition(3,nCorr,tileSize,
-					   16384/nCorr/tileSize));
-    TiledColumnStMan tiledStMan3("TiledUVW",
-				 IPosition(2,3,1024));
+  TiledShapeStMan tiledStMan1("TiledData",
+			      IPosition(3,nCorr,tileSize,
+					16384/nCorr/tileSize));
+  TiledShapeStMan tiledStMan1f("TiledFlag",
+			       IPosition(3,nCorr,tileSize,
+					 16384/nCorr/tileSize));
+  TiledShapeStMan tiledStMan2("TiledWeight",
+			      IPosition(3,nCorr,tileSize,
+					16384/nCorr/tileSize));
+  TiledColumnStMan tiledStMan3("TiledUVW",
+			       IPosition(2,3,1024));
 
-    // Bind the DATA and FLAG columns to the tiled stman
-    newtab.bindColumn(MS::columnName(MS::DATA),tiledStMan1);
-    newtab.bindColumn(MS::columnName(MS::FLAG),tiledStMan1f);
-    newtab.bindColumn(MS::columnName(MS::UVW),tiledStMan3);
-  } else {
-    newtab.bindColumn(MS::columnName(MS::DATA),aipsStMan);
-    newtab.bindColumn(MS::columnName(MS::FLAG),aipsStMan);
-    newtab.bindColumn(MS::columnName(MS::UVW),aipsStMan);
-  }
+  // Bind the DATA and FLAG columns to the tiled stman
+  newtab.bindColumn(MS::columnName(MS::DATA),tiledStMan1);
+  newtab.bindColumn(MS::columnName(MS::FLAG),tiledStMan1f);
+  newtab.bindColumn(MS::columnName(MS::UVW),tiledStMan3);
+
   TableLock lock(TableLock::PermanentLocking);
   MeasurementSet ms(newtab,lock);
 
@@ -1672,7 +1665,6 @@ main(int argc, char **argv)
 	inp.version ("4 - PKGW hacked MIRIAD->MS converter");
 	inp.create ("vis",     "",        "Name of CARMA dataset name",         "string");
 	inp.create ("ms",      "",        "Name of MeasurementSet",             "string");
-	inp.create ("useTSM",  "True",    "Use the TiledStorageManager",        "bool");
 	inp.create ("narrow",  "all",     "Which of the narrow band windows",   "string");
 	inp.create ("win",     "all",     "Which of the window averages",       "string");
 	inp.create ("tsys",    "False",   "Fill WEIGHT from Tsys in data?",     "bool");
@@ -1692,7 +1684,6 @@ main(int argc, char **argv)
 	if (ms == "")
 	    ms = vis.before ('.') + ".ms";
 
-	Bool useTSM  =  inp.getBool ("useTSM"); // historic: we used to use UseISM
 	Bool Qtsys   =  inp.getBool ("tsys");
 	Bool Qarrays =  inp.getBool ("arrays"); // debug
 	Bool Qlsrk    = inp.getBool ("lsrk"); // LSRK or LSRD
@@ -1724,7 +1715,7 @@ main(int argc, char **argv)
 	CarmaFiller cf (vis, debug, Qtsys, Qarrays, polmode);
 
 	cf.checkInput (narrow, win);
-	cf.setupMeasurementSet (ms, useTSM);
+	cf.setupMeasurementSet (ms);
 	cf.fillObsTables ();
 	cf.fillAntennaTable ();
 	cf.fillMSMainTable (True, snumbase);
