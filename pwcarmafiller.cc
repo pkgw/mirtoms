@@ -80,34 +80,6 @@ typedef struct window {
 } WINDOW;
 
 
-// apply CARMA line calibration, the 'linecal' method
-// check MIRIADs 'uvcal options=linecal' for the other approach
-
-void linecal(int ndata, float *data, float phi1, float phi2)
-{
-  float x,y,c,s;
-  if (ndata <= 0) return;
-
-  c = cos(phi1-phi2);
-  s = sin(phi1-phi2);
-
-  for (int i=0; i<ndata*2; i+=2) {
-    x = data[i];
-    y = data[i+1];
-    data[i]   =  c*x - s*y;
-    data[i+1] =  s*x + c*y;
-#if 0
-    if (i==0) cout << "LINECAL: " << c << " " << s <<
-		" old: " << x << " " << y <<
-		" new: " << data[0] << " " << data[1] << endl;
-#endif
-  }
-}
-
-
-
-// a helper class
-
 class CarmaFiller
 {
   // This is an implementation helper class used to store 'local' data
@@ -117,7 +89,7 @@ public:
   CarmaFiller(String& infile, Int debug=0,
 	      Bool Qtsys=False,
 	      Bool Qarrays=False,
-	      Bool Qlinecal=False, Int polmode=0);
+	      Int polmode=0);
 
   // Standard destructor
   ~CarmaFiller();
@@ -226,7 +198,6 @@ private:
   WINDOW win;
   Bool   Qtsys_p;    /* tsys weight's */
   Bool   Qarrays_p;  /* write separate arrays */
-  Bool   Qlinecal_p; /* do linecal */
 
   // Data buffers.... again in MIRIAD format
 
@@ -241,7 +212,7 @@ private:
 
 // ==============================================================================================
 CarmaFiller::CarmaFiller(String& infile, Int debug,
-			 Bool Qtsys, Bool Qarrays, Bool Qlinecal, Int polmode)
+			 Bool Qtsys, Bool Qarrays, Int polmode)
 {
   infile_p = infile;
   debug_p = debug;
@@ -250,7 +221,6 @@ CarmaFiller::CarmaFiller(String& infile, Int debug,
   npoint = 0;           //  # pointings (using independant RA/DEC?)
   Qtsys_p = Qtsys;
   Qarrays_p = Qarrays;
-  Qlinecal_p = Qlinecal;
   polmode_p = polmode;
   zero_tsys = 0;
   for (int i=0; i<MAXFIELD; i++) fcount[i] = 0;
@@ -262,7 +232,6 @@ CarmaFiller::CarmaFiller(String& infile, Int debug,
 		     << "http://www.astro.umd.edu/~teuben/casa/carmafiller.html" << endl;
   if (Debug(1)) cout << (Qtsys_p ?  "tsys weights" : "weights=1") << endl;
   if (Debug(1)) cout << (Qarrays_p ? "split arrays" : "single array forced") << endl;
-  if (Debug(1)) cout << (Qlinecal_p ? "linecal applied" : "linecal not applied") << endl;
 
   if (sizeof(double) != sizeof(Double))
     cout << "Double != double; carmafiller will probably fail" << endl;
@@ -930,12 +899,6 @@ void CarmaFiller::fillMSMainTable(Bool scan, Int snumbase)
     if (casapolidx < 0)
 	throw AipsError ("CarmaFiller: unexpected MIRIAD polarization " + mirpol);
 
-    // now that phasem1 has been loaded, apply linelength, if needed
-    if (Qlinecal_p) {
-	linecal(nread,data,phasem1[ant1-1],phasem1[ant2-1]);
-	// linecal(nwread,wdata,phasem1[ant1-1],phasem1[ant2-1]);
-    }
-
     // first construct the data (vis & flag) in a single long array
     // containing all spectral windows
     // In the (optional) loop over all spectral windows, subsets of
@@ -1060,8 +1023,7 @@ void CarmaFiller::fillMSMainTable(Bool scan, Int snumbase)
   } // for(grou) : loop over all visibilities
   show();
 
-  cout << infile_p << ": Processed " << group << " visibilities "
-       << (Qlinecal_p ? "(applying linecal)." : "(raw)." )
+  cout << infile_p << ": Processed " << group << " visibilities."
        << endl;
   cout << "Found " << npoint << " pointings with "
        <<  nfield << " unique source/fields "
@@ -1679,9 +1641,6 @@ void CarmaFiller::Tracking(int record)
 
     uvtrack_c(uv_handle_p,"inttime","u");
 
-    if (Qlinecal_p)
-      uvtrack_c(uv_handle_p,"phasem1","u");  // linelength meaurements
-
     // weather:
     // uvtrack_c(uv_handle_p,"airtemp","u");
     // uvtrack_c(uv_handle_p,"dewpoint","u");
@@ -1717,15 +1676,6 @@ void CarmaFiller::Tracking(int record)
     if (Debug(2)) cout << "Warning: antpos changed at record " << record << endl;
     if (Qarrays_p)
       fillAntennaTable();
-  }
-
-  if (Qlinecal_p) {
-    uvprobvr_c(uv_handle_p,"phasem1",vtype,&vlen,&vupd);
-    if (vupd) {
-      // lets assume (hope?) that nants_p didn't change, it better not.
-      uvgetvr_c(uv_handle_p,H_REAL,"phasem1",(char *)phasem1,nants_p);
-      // cout << "PHASEM1: " << phasem1[0] << " " << phasem1[1] << " ...\n";
-    }
   }
 
   if (win.nspect > 0) {
@@ -2050,7 +2000,6 @@ int main(int argc, char **argv)
     inp.create("vis",     "",        "Name of CARMA dataset name",         "string");
     inp.create("ms",      "",        "Name of MeasurementSet",             "string");
     inp.create("useTSM",  "True",    "Use the TiledStorageManager",        "bool");
-    inp.create("linecal", "False",   "Apply CARMA linecal on the fly?",    "bool");
     inp.create("narrow",  "all",     "Which of the narrow band windows",   "string");
     inp.create("win",     "all",     "Which of the window averages",       "string");
     inp.create("tsys",    "False",   "Fill WEIGHT from Tsys in data?",     "bool");
@@ -2070,7 +2019,6 @@ int main(int argc, char **argv)
     Bool useTSM  =  inp.getBool("useTSM");      // historic: we used to use UseISM
     Bool Qtsys   =  inp.getBool("tsys");        //
     Bool Qarrays =  inp.getBool("arrays");      // debug
-    Bool Qlinecal = inp.getBool("linecal");     //
     Bool Qlsrk    = inp.getBool("lsrk");        // LSRK or LSRD
     Int  polmode  = inp.getInt("polmode");
     Int  snumbase = inp.getInt("snumbase");
@@ -2100,7 +2048,7 @@ int main(int argc, char **argv)
     } else
       win = inp.getIntArray("win");
 
-    CarmaFiller bf(vis,debug,Qtsys,Qarrays,Qlinecal,polmode);
+    CarmaFiller bf(vis,debug,Qtsys,Qarrays,polmode);
 
     bf.checkInput(narrow,win);
     bf.setupMeasurementSet(ms,useTSM);
