@@ -1429,11 +1429,11 @@ void CarmaFiller::Tracking(int record)
     object_p = vdata;  // also track object name whenever changed
 
 
-    for (i=0, j=-1; i<source_p.nelements(); i++) {
-      if (source_p[i] == object_p) {
-	j = i ;
-	break;
-      }
+    for (i = 0, j = -1;  i < (int) source_p.nelements (); i++) {
+	if (source_p[i] == object_p) {
+	    j = i;
+	    break;
+	}
     }
     // j should always be >= 0 now, and is the source index
 
