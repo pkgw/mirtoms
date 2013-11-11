@@ -80,23 +80,6 @@ typedef struct window {
 } WINDOW;
 
 
-Double date2mjd(const String& date)
-{
-  Int day,month,year;
-
-  if (date[2] == '/') {     // old FITS style (dd/mm/yy)
-    sscanf(date.chars(),"%2d/%2d/%2d",&day,&month,&year);
-    year+=1900;
-    if (year<1950) year+=100;   // yuck !
-  } else {      // YEAR-2000 (ISO) convention (ccyy-mm-ddThh:mm:ss.sss)
-    cerr << "Parsing new Year-2000 notation" << endl;
-    sscanf(date.chars(),"%4d-%2d-%2d",&year,&month,&day);
-    //sscanf(date,"%4d-%2d-%2dT%2d:%2d:%f",&year,&month,&day,&hour,&min,&sec);
-  }
-  MVTime mjd_date(year,month,(Double)day);
-  return mjd_date.second();
-}
-
 // apply CARMA line calibration, the 'linecal' method
 // check MIRIADs 'uvcal options=linecal' for the other approach
 
@@ -753,13 +736,6 @@ void CarmaFiller::fillObsTables()
     blog(0) = "See HISTORY for CARMA observing log";
     msObsCol.log().put(0,blog);
   }
-
-  // should double buffer history, and search for  (e.g.)
-  // GPAVER: Executed on: 96SEP12:15:40:48.0
-
-  // String date("");
-  // if (date=="") date="01/01/00";
-  // Double time=date2mjd(date);
 
   MSHistoryColumns msHisCol(ms_p.history());
 
