@@ -103,6 +103,7 @@ private:
     void init_window ();
 
     bool uv_hasvar (const char *varname);
+    char *uv_getstr (const char *varname);
 
     String infile_p;
     Int uv_handle_p;
@@ -194,11 +195,20 @@ CarmaFiller::uv_hasvar (const char *varname)
 }
 
 
-void 
+char *
+CarmaFiller::uv_getstr (const char *varname)
+{
+    char *value = new char[64];
+    // note: can't use sizeof(*value) since the size parameter is an int. Boo.
+    uvgetvr_c (uv_handle_p, H_BYTE, varname, value, 64);
+    return value;
+}
+
+
+void
 CarmaFiller::checkInput ()
 {
     Int i, nread, nwread;
-    char vdata[64];
     Float epoch;
 
     uvread_c (uv_handle_p, preamble, data, flags, MAXCHAN, &nread);
@@ -230,22 +240,17 @@ CarmaFiller::checkInput ()
 	uvgetvr_c (uv_handle_p, H_DBLE, "restfreq", (char *)win.restfreq, win.nspect);
 
 
-    if (uv_hasvar ("project")) {
-	uvgetvr_c (uv_handle_p, H_BYTE, "project", vdata, 32);
-	project_p = vdata;
-    } else
+    if (uv_hasvar ("project"))
+	project_p = uv_getstr ("project");
+    else
 	project_p = "unknown";
 
-    uvgetvr_c (uv_handle_p, H_BYTE, "source", vdata, 10);
-    object_p = vdata;
+    object_p = uv_getstr ("source");
+    telescope_name = uv_getstr ("telescop");
 
-    uvgetvr_c (uv_handle_p, H_BYTE, "telescop", vdata, 10);
-    telescope_name = vdata;
-
-    if (uv_hasvar ("observer")) {
-	uvgetvr_c (uv_handle_p, H_BYTE, "observer", vdata, 10);
-	observer_name = vdata;
-    } else
+    if (uv_hasvar ("observer"))
+	observer_name = uv_getstr ("observer");
+    else
 	observer_name = "unknown";
 
     mount_p = 0;
@@ -1277,8 +1282,7 @@ void CarmaFiller::Tracking(int record)
   int source_updated = uv_hasvar ("source");
 
   if (source_updated) {
-    uvgetvr_c(uv_handle_p,H_BYTE,"source",vdata,10);
-    object_p = vdata;
+    object_p = uv_getstr ("source");
 
 
     // bug: as is, source_p will get repeated values, trim it later
@@ -1292,7 +1296,6 @@ void CarmaFiller::Tracking(int record)
     decs_p[decs_p.nelements()-1] = 0.0;                // these would never be initialized
 
 
-    //uvgetvr_c(uv_handle_p,H_BYTE,"purpose",vdata,10);
     vdata[0] = 'S'; vdata[1] = '\0';
     purpose_p.resize(purpose_p.nelements()+1, True);   // need to copy the old values
     purpose_p[purpose_p.nelements()-1] = vdata;
@@ -1304,9 +1307,7 @@ void CarmaFiller::Tracking(int record)
     uvgetvr_c(uv_handle_p,H_DBLE,"ra", (char *)&ra_p, 1);
     uvgetvr_c(uv_handle_p,H_DBLE,"dec",(char *)&dec_p,1);
     dra_p = ddec_p = 0.;
-    uvgetvr_c(uv_handle_p,H_BYTE,"source",vdata,10);
-    object_p = vdata;  // also track object name whenever changed
-
+    object_p = uv_getstr ("source");
 
     for (i = 0, j = -1;  i < (int) source_p.nelements (); i++) {
 	if (source_p[i] == object_p) {
