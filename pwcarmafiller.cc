@@ -79,11 +79,10 @@ typedef struct window {
 
 class CarmaFiller {
 public:
-    CarmaFiller (String& infile, Int debug=0,
+    CarmaFiller (String& infile, Int debug_level=0,
 		 Bool apply_tsys=False, Int polmode=0);
 
     void checkInput ();
-    Bool Debug (int level);
 
     void setupMeasurementSet (const String& MSFileName);
 
@@ -106,7 +105,7 @@ private:
     Int uv_handle_p;
     MeasurementSet ms_p;
     MSColumns *msc_p;
-    Int debug_p;
+    Int debug_level;
     Int nIF_p;
     String array_p, project_p, object_p, telescope_p,
 	observer_p, version_p, timsys_p;
@@ -153,13 +152,13 @@ private:
 };
 
 
-CarmaFiller::CarmaFiller (String& infile, Int debug, Bool apply_tsys, Int polmode)
+CarmaFiller::CarmaFiller (String& infile, Int debug_level, Bool apply_tsys, Int polmode)
 {
     infile_p = infile;
-    debug_p = debug;
     nArray_p = 0;
     nfield = 0;
     npoint = 0;
+    this->debug_level = debug_level;
     this->apply_tsys = apply_tsys;
     polmode_p = polmode;
     zero_tsys = 0;
@@ -178,12 +177,7 @@ CarmaFiller::CarmaFiller (String& infile, Int debug, Bool apply_tsys, Int polmod
 }
 
 
-Bool CarmaFiller::Debug(int level)
-{
-  Bool ok=False;
-  if (level <= debug_p) ok=True;
-  return ok;
-}
+#define DEBUG(level) (this->debug_level >= (level))
 
 
 void CarmaFiller::checkInput()
@@ -193,7 +187,7 @@ void CarmaFiller::checkInput()
   char vtype[10], vdata[64];
   Float epoch;
 
-  if (Debug(1)) cout << "CarmaFiller::checkInput" << endl;
+  if (DEBUG(1)) cout << "CarmaFiller::checkInput" << endl;
 
   // Let's read one scan and try and derive some basics. If important
   // variables not present, bail out (or else scan on)
@@ -227,7 +221,7 @@ void CarmaFiller::checkInput()
       uvgetvr_c(uv_handle_p,H_INT, "nants", (char *)&nants_p,1);
       uvgetvr_c(uv_handle_p,H_DBLE,"antpos",(char *)antpos,3*nants_p);
       uvgetvr_c(uv_handle_p,H_DBLE,"longitu",(char *)&longitude,1);
-      if (Debug(1)) {
+      if (DEBUG(1)) {
 	cout << "Found " << nants_p << " antennas (first scan)" << endl;
 	for (int i=0; i<nants_p; i++) {
 	  cout << antpos[i] << " " <<
@@ -239,14 +233,14 @@ void CarmaFiller::checkInput()
       // remember systemp is stored systemp[nants][nwin] in C notation
       if (win.nspect > 0) {
 	uvgetvr_c(uv_handle_p,H_REAL,"systemp",(char *)systemp,nants_p*win.nspect);
-	if (Debug(1)) {
+	if (DEBUG(1)) {
 	  cout << "Found systemps (first scan)" ;
 	  for (Int i=0; i<nants_p; i++)  cout << systemp[i] << " ";
 	  cout << endl;
 	}
       } else {
 	uvgetvr_c(uv_handle_p,H_REAL,"wsystemp",(char *)systemp,nants_p);
-	if (Debug(1)) {
+	if (DEBUG(1)) {
 	  cout << "Found wsystemps (first scan)" ;
 	  for (Int i=0; i<nants_p; i++)  cout << systemp[i] << " ";
 	  cout << endl;
@@ -255,7 +249,7 @@ void CarmaFiller::checkInput()
 
       if (win.nspect > 0) {
 	uvgetvr_c(uv_handle_p,H_DBLE,"restfreq",(char *)win.restfreq,win.nspect);
-	if (Debug(1)) {
+	if (DEBUG(1)) {
 	  cout << "Found restfreq (first scan)" ;
 	  for (Int i=0; i<win.nspect; i++)  cout << win.restfreq[i] << " ";
 	  cout << endl;
@@ -271,11 +265,11 @@ void CarmaFiller::checkInput()
 	project_p = vdata;
       } else
 	project_p = "unknown";
-      if (Debug(1)) cout << "Project=>" << project_p << "<=" << endl;
+      if (DEBUG(1)) cout << "Project=>" << project_p << "<=" << endl;
 
       //uvgetvr_c(uv_handle_p,H_BYTE,"version",vdata,32);
       version_p = "hack"; //vdata;
-      if (Debug(1)) cout << "Version=>" << version_p << "<=" << endl;
+      if (DEBUG(1)) cout << "Version=>" << version_p << "<=" << endl;
 
       uvgetvr_c(uv_handle_p,H_BYTE,"source",vdata,10);
       object_p = vdata;
@@ -285,7 +279,7 @@ void CarmaFiller::checkInput()
       array_p = vdata;
       // array_p = "CARMA"; take that
       array_p = "ATA";
-      if (Debug(1)) cout << "First baseline=>" << array_p << "<=" << endl;
+      if (DEBUG(1)) cout << "First baseline=>" << array_p << "<=" << endl;
 
       // All CARMA (OVRO,BIMA,SZA) have this
       mount_p = 0;
@@ -413,7 +407,7 @@ void CarmaFiller::checkInput()
 
 void CarmaFiller::setupMeasurementSet(const String& MSFileName)
 {
-  if (Debug(1)) cout << "CarmaFiller::setupMeasurementSet" << endl;
+  if (DEBUG(1)) cout << "CarmaFiller::setupMeasurementSet" << endl;
 
   Int nCorr = npol_p;   // STOKES axis
   Int nChan = nchan_p;  // we are only exporting the narrow channels to the MS
@@ -434,7 +428,7 @@ void CarmaFiller::setupMeasurementSet(const String& MSFileName)
   td.defineHypercolumn("TiledUVW",2,
 		       stringToVector(MS::columnName(MS::UVW)));
 
-  if (Debug(1))  cout << "Creating MS=" << MSFileName  << endl;
+  if (DEBUG(1))  cout << "Creating MS=" << MSFileName  << endl;
   SetupNewTable newtab(MSFileName, td, Table::New);
 
   // Set the default Storage Manager to be the Incr one
@@ -526,7 +520,7 @@ void CarmaFiller::setupMeasurementSet(const String& MSFileName)
 #define HISTLINE 8192
 void CarmaFiller::fillObsTables()
 {
-  if (Debug(1)) cout << "CarmaFiller::fillObsTables" << endl;
+  if (DEBUG(1)) cout << "CarmaFiller::fillObsTables" << endl;
 
   char hline[HISTLINE];
   Int heof;
@@ -569,7 +563,7 @@ void CarmaFiller::fillObsTables()
 
 void CarmaFiller::fillMSMainTable(Bool scan, Int snumbase)
 {
-  if (Debug(1)) cout << "CarmaFiller::fillMSMainTable" << endl;
+  if (DEBUG(1)) cout << "CarmaFiller::fillMSMainTable" << endl;
 
   MSColumns& msc(*msc_p);           // Get access to the MS columns, new way
   Int nCorr = npol_p;               // # stokes
@@ -600,7 +594,7 @@ void CarmaFiller::fillMSMainTable(Bool scan, Int snumbase)
   Double interval;
   Bool lastRowFlag = False;
 
-  if (Debug(1))
+  if (DEBUG(1))
       cout << "Writing " << nIF_p << " spectral windows" << endl;
 
   int nread, nwread;
@@ -614,7 +608,7 @@ void CarmaFiller::fillMSMainTable(Bool scan, Int snumbase)
     // cout << "UVREAD: " << data[0] << " " << data[1] << endl;
     if (nread <= 0) break;          // done with reading miriad data
 
-    if (Debug(9)) cout << "UVREAD: " << nread << endl;
+    if (DEBUG(9)) cout << "UVREAD: " << nread << endl;
     if (win.nspect > 0)
 	uvwread_c(uv_handle_p, wdata, wflags, MAXCHAN, &nwread);
     else
@@ -643,7 +637,7 @@ void CarmaFiller::fillMSMainTable(Bool scan, Int snumbase)
 	time = (preamble[3] - 2400000.5) * C::day;
 	time_p = time;
 
-	if (Debug(3)) {                 // timeline monitoring...
+	if (DEBUG(3)) {                 // timeline monitoring...
 	    static Double time0 = -1.0;
 	    static Double dt0 = -1.0;
 
@@ -665,7 +659,7 @@ void CarmaFiller::fillMSMainTable(Bool scan, Int snumbase)
 		dt0 = time-time0;
 	    time0 = time;
 	    cout << endl;
-	} // Debug(3) for timeline monitoring
+	} // DEBUG(3) for timeline monitoring
 
 	interval = inttime_p;
 
@@ -674,12 +668,12 @@ void CarmaFiller::fillMSMainTable(Bool scan, Int snumbase)
 	// which array configuration we're in.
 
 	if (uvupdate_c(uv_handle_p)) {       // aha, something important changed
-	    if (Debug(4)) {
+	    if (DEBUG(4)) {
 		cout << "Record " << group+1 << " uvupdate" << endl;
 	    }
 	    Tracking(group);
 	} else {
-	    if (Debug(5)) cout << "Record " << group << endl;
+	    if (DEBUG(5)) cout << "Record " << group << endl;
 	}
 
 	//  nAnt_p.resize(array+1);
@@ -701,7 +695,7 @@ void CarmaFiller::fillMSMainTable(Bool scan, Int snumbase)
 	uvw(2) = -preamble[2] * 1e-9; // note - sign (CASA vs. MIRIAD convention)
 	uvw   *= C::c;                // Finally convert to meters for CASA
 
-	if (group==0 && Debug(1)) {
+	if (group==0 && DEBUG(1)) {
 	    cout << "### First record: " << endl;
 	    cout << "### Preamble: " << preamble[0] << " " <<
 		preamble[1] << " " <<
@@ -843,7 +837,7 @@ void CarmaFiller::fillMSMainTable(Bool scan, Int snumbase)
        <<  source_p.nelements() << " sources and "
        <<  nArray_p << " arrays."
        << endl;
-  if (Debug(1))
+  if (DEBUG(1))
     cout << "nAnt_p contains: " << nAnt_p.nelements() << endl;
 
 }
@@ -851,7 +845,7 @@ void CarmaFiller::fillMSMainTable(Bool scan, Int snumbase)
 
 void CarmaFiller::fillAntennaTable()
 {
-  if (Debug(1)) cout << "CarmaFiller::fillAntennaTable" << endl;
+  if (DEBUG(1)) cout << "CarmaFiller::fillAntennaTable" << endl;
   Int nAnt=nants_p;
 
   arrayXYZ_p.resize(3);
@@ -876,8 +870,8 @@ void CarmaFiller::fillAntennaTable()
     cout << "Warning: unknown array position for "<<array_p<<endl;
     arrayXYZ_p = 0.0;
   }
-  if(Debug(3)) cout << "number of antennas ="<<nAnt<<endl;
-  if(Debug(3)) cout << "array ref pos:"<<arrayXYZ_p<<endl;
+  if(DEBUG(3)) cout << "number of antennas ="<<nAnt<<endl;
+  if(DEBUG(3)) cout << "array ref pos:"<<arrayXYZ_p<<endl;
 
   String timsys = "TAI";  // assume, for now ....
 
@@ -919,7 +913,7 @@ void CarmaFiller::fillAntennaTable()
   }
   Int row=ms_p.antenna().nrow()-1;
 
-  if (Debug(2)) cout << "CarmaFiller::fillAntennaTable row=" << row+1
+  if (DEBUG(2)) cout << "CarmaFiller::fillAntennaTable row=" << row+1
        << " array " << nArray_p+1 << endl;
 
   for (Int i=0; i<nAnt; i++) {
@@ -933,7 +927,7 @@ void CarmaFiller::fillAntennaTable()
     antXYZ(1) = antpos[i+nAnt];
     antXYZ(2) = antpos[i+nAnt*2];
     antXYZ *= 1e-9 * C::c;;             //# and now in meters
-    if (Debug(2)) cout << "Ant " << i+1 << ":" << antXYZ << " (m)." << endl;
+    if (DEBUG(2)) cout << "Ant " << i+1 << ":" << antXYZ << " (m)." << endl;
 
     String mount;                           // really should consult
     switch (mount_p) {                 	    // the "mount" uv-variable
@@ -963,7 +957,7 @@ void CarmaFiller::fillAntennaTable()
   nArray_p++;
   nAnt_p.resize(nArray_p);
   nAnt_p[nArray_p-1] = 0;
-  if (Debug(3) && nArray_p > 1)
+  if (DEBUG(3) && nArray_p > 1)
     cout << "DEBUG0 :: " << nAnt_p[nArray_p-2] << endl;
 
   if (nArray_p > 1) return;
@@ -978,13 +972,13 @@ void CarmaFiller::fillAntennaTable()
 
 void CarmaFiller::fillSyscalTable()
 {
-  if (Debug(1)) cout << "CarmaFiller::fillSyscalTable" << endl;
+  if (DEBUG(1)) cout << "CarmaFiller::fillSyscalTable" << endl;
 
   MSSysCalColumns&     msSys(msc_p->sysCal());
   Vector<Float> Systemp(1);    // should we set both receptors same?
   static Int row = -1;
 
-  if (Debug(1))
+  if (DEBUG(1))
     for (Int i=0; i<nants_p; i++)
       cout  << "SYSTEMP: " << i << ": " << systemp[i] << endl;
 
@@ -1007,7 +1001,7 @@ void CarmaFiller::fillSyscalTable()
 
 void CarmaFiller::fillSpectralWindowTable()
 {
-  if (Debug(1)) cout << "CarmaFiller::fillSpectralWindowTable" << endl;
+  if (DEBUG(1)) cout << "CarmaFiller::fillSpectralWindowTable" << endl;
 
   MSSpWindowColumns&      msSpW(msc_p->spectralWindow());
   MSDataDescColumns&      msDD(msc_p->dataDescription());
@@ -1066,9 +1060,9 @@ void CarmaFiller::fillSpectralWindowTable()
     msSpW.numChan().put(i,win.nschan[i]);
     BW = 0.0;
     Double fwin = win.sfreq[i]*1e9;
-    if (Debug(1)) cout << "Fwin: OBS=" << fwin/1e9;
+    if (DEBUG(1)) cout << "Fwin: OBS=" << fwin/1e9;
     fwin = tolsr(fwin).getValue().getValue();
-    if (Debug(1)) cout << " LSR=" << fwin/1e9 << endl;
+    if (DEBUG(1)) cout << " LSR=" << fwin/1e9 << endl;
     for (j=0; j < win.nschan[i]; j++) {
       f(j) = fwin + j * win.sdf[i] * 1e9;
       w(j) = abs(win.sdf[i]*1e9);
@@ -1123,7 +1117,7 @@ void CarmaFiller::fillSpectralWindowTable()
 
 void CarmaFiller::fillFieldTable()
 {
-  if (Debug(1)) cout << "CarmaFiller::fillFieldTable" << endl;
+  if (DEBUG(1)) cout << "CarmaFiller::fillFieldTable" << endl;
 
   msc_p->setDirectionRef(epochRef_p);
 
@@ -1147,7 +1141,7 @@ void CarmaFiller::fillFieldTable()
 
     ms_p.field().addRow();
 
-    if (Debug(1))
+    if (DEBUG(1))
       cout << "FLD: " << fld << " " << sid << " " << source_p[field[fld]] << endl;
 
     if (sid > 0) {
@@ -1188,7 +1182,7 @@ void CarmaFiller::fillFieldTable()
 
 void CarmaFiller::fillSourceTable()
 {
-  if (Debug(1)) cout << "CarmaFiller::fillSourceTable" << endl;
+  if (DEBUG(1)) cout << "CarmaFiller::fillSourceTable" << endl;
   Int n = win.nspect;
   Int ns = 0;
   Int skip;
@@ -1235,7 +1229,7 @@ void CarmaFiller::fillSourceTable()
 
 void CarmaFiller::fillFeedTable()
 {
-  if (Debug(1)) cout << "CarmaFiller::fillFeedTable" << endl;
+  if (DEBUG(1)) cout << "CarmaFiller::fillFeedTable" << endl;
 
   MSFeedColumns msfc(ms_p.feed());
 
@@ -1263,9 +1257,9 @@ void CarmaFiller::fillFeedTable()
   // fill the feed table
   // will only do UP TO the largest antenna referenced in the dataset
   Int row=-1;
-  if (Debug(3)) cout << "DEBUG1 :: " << nAnt_p.nelements() << endl;
+  if (DEBUG(3)) cout << "DEBUG1 :: " << nAnt_p.nelements() << endl;
   for (Int arr=0; arr< (Int)nAnt_p.nelements(); arr++) {
-    if (Debug(3)) cout << "DEBUG2 :: " << nAnt_p[arr] << endl;
+    if (DEBUG(3)) cout << "DEBUG2 :: " << nAnt_p[arr] << endl;
     for (Int ant=0; ant<nAnt_p[arr]; ant++) {
       ms_p.feed().addRow(); row++;
 
@@ -1293,7 +1287,7 @@ void CarmaFiller::fillFeedTable()
 
 void CarmaFiller::fixEpochReferences() {
 
-  if (Debug(1)) cout << "CarmaFiller::fixEpochReferences" << endl;
+  if (DEBUG(1)) cout << "CarmaFiller::fixEpochReferences" << endl;
 
   if (timsys_p=="IAT") timsys_p="TAI";
   if (timsys_p=="UTC" || timsys_p=="TAI") {
@@ -1313,7 +1307,7 @@ void CarmaFiller::fixEpochReferences() {
 
 void CarmaFiller::Tracking(int record)
 {
-  if (Debug(3)) cout << "CarmaFiller::Tracking" << endl;
+  if (DEBUG(3)) cout << "CarmaFiller::Tracking" << endl;
 
   char vtype[10], vdata[10];
   int vlen, vupd, vupd1, vupd2, i, j, k;
@@ -1366,7 +1360,7 @@ void CarmaFiller::Tracking(int record)
   if (vupd && record) {
     uvgetvr_c(uv_handle_p,H_INT, "nants", (char *)&nants_p,1);
     uvgetvr_c(uv_handle_p,H_DBLE,"antpos",(char *)antpos,3*nants_p);
-    if (Debug(2)) {
+    if (DEBUG(2)) {
       cout << "Found " << nants_p << " antennas for array "
 	   << nArray_p << endl;
       for (int i=0; i<nants_p; i++) {
@@ -1375,14 +1369,14 @@ void CarmaFiller::Tracking(int record)
                 antpos[i+nants_p*2] << endl;
       }
     }
-    if (Debug(2)) cout << "Warning: antpos changed at record " << record << endl;
+    if (DEBUG(2)) cout << "Warning: antpos changed at record " << record << endl;
   }
 
   if (win.nspect > 0) {
     uvprobvr_c(uv_handle_p,"systemp",vtype,&vlen,&vupd);
     if (vupd) {
       uvgetvr_c(uv_handle_p,H_REAL,"systemp",(char *)systemp,nants_p*win.nspect);
-      if (Debug(3)) {
+      if (DEBUG(3)) {
 	cout << "Found systemps (new scan)" ;
 	for (Int i=0; i<nants_p; i++)  cout << systemp[i] << " ";
 	cout << endl;
@@ -1392,7 +1386,7 @@ void CarmaFiller::Tracking(int record)
     uvprobvr_c(uv_handle_p,"wsystemp",vtype,&vlen,&vupd);
     if (vupd) {
       uvgetvr_c(uv_handle_p,H_REAL,"wsystemp",(char *)systemp,nants_p);
-      if (Debug(3)) {
+      if (DEBUG(3)) {
 	cout << "Found wsystemps (new scan)" ;
 	for (Int i=0; i<nants_p; i++)  cout << systemp[i] << " ";
 	cout << endl;
@@ -1456,7 +1450,7 @@ void CarmaFiller::Tracking(int record)
     }
     // k could be -1, when a new field/source is found
 
-    if (Debug(1)) {
+    if (DEBUG(1)) {
       cout << "POINTING: " << npoint
 	   << " source: " << object_p << " [" << j << "," << k << "] "
 	   << " dra/ddec: "   << dra_p << " " << ddec_p << endl;
@@ -1465,7 +1459,7 @@ void CarmaFiller::Tracking(int record)
     if (k<0) {                             // we have a new source/field combination
       ifield = nfield;
       nfield++;
-      if (Debug(2)) cout << "Adding new field " << ifield
+      if (DEBUG(2)) cout << "Adding new field " << ifield
 			 << " for " << object_p << source_p[j]
 			 << " at "
 			 << dra_p *206264.8062 << " "
@@ -1490,7 +1484,7 @@ void CarmaFiller::Tracking(int record)
       ifield = k;
     }
 
-    if (Debug(3)) cout << "Warning: pointing " << j
+    if (DEBUG(3)) cout << "Warning: pointing " << j
         << " (dra/ddec) changed at record " << record << " : "
         << dra_p *206264.8062 << " "
         << ddec_p*206264.8062 << endl;
@@ -1508,7 +1502,7 @@ void CarmaFiller::Tracking(int record)
 
 void CarmaFiller::init_window()
 {
-  if (Debug(1)) cout << "CarmaFiller::init_window" << endl;
+  if (DEBUG(1)) cout << "CarmaFiller::init_window" << endl;
 
   char vtype[10];
   int i, idx, vlen, vupd, nchan, nspect, nwide;
@@ -1518,7 +1512,7 @@ void CarmaFiller::init_window()
     uvrdvr_c(uv_handle_p,H_INT,"nchan",(char *)&nchan, NULL, 1);
   } else {
     nchan = 0;
-    if (Debug(1)) cout << "nchan = 0" << endl;
+    if (DEBUG(1)) cout << "nchan = 0" << endl;
   }
 
   uvprobvr_c(uv_handle_p,"nspect",vtype,&vlen,&vupd);
@@ -1599,7 +1593,7 @@ void CarmaFiller::init_window()
     idx++;
   }
 
-  if (Debug(1)) {
+  if (DEBUG(1)) {
     cout << "Layout of spectral windows (init_window): nspect=" << nspect
 	 << " nwide=" << nwide
 	 << "\n";
