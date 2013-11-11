@@ -610,12 +610,13 @@ void CarmaFiller::checkInput(Block<Int>& narrow, Block<Int>& window)
       break; // we only do work on the first visibility! could get max npol by brute force
     }
   }
+
   if (nvis == 0) {
     throw(AipsError("CarmaFiller: Bad first uvread: no narrow or wide band data present"));
     ok = False;
     return;
-  } else
-    cout << "CarmaFiller::checkInput: " << nvis << " records found" << endl;
+  }
+
   uvrewind_c(uv_handle_p);
 
   int numCorr;
@@ -935,9 +936,8 @@ void CarmaFiller::fillMSMainTable(Bool scan, Int snumbase)
   Double interval;
   Bool lastRowFlag = False;
 
-  cout << "CarmaFiller::fillMSMainTable(): using " << nIF_p << " spectral windows" << endl;
-
-  if (Debug(1)) cout << "Writing " << nIF_p << " spectral windows" << endl;
+  if (Debug(1))
+      cout << "Writing " << nIF_p << " spectral windows" << endl;
 
   int nread, nwread;
   Int ant1, ant2;
@@ -1301,10 +1301,7 @@ void CarmaFiller::fillAntennaTable()
   } else  if (nAnt == 23 && array_p=="OVRO") {
     cout << "CARMA array (6 OVRO, 9 BIMA, 8 SZA) assumed" << endl;
     array_p = "CARMA";
-  } else  if (array_p=="CARMA") {
-    cout << "Hurray, CARMA data; version " << version_p << " with " << nAnt << " antennas" << endl;
-  } else
-    cout << "Ant configuration not supported yet" << endl;
+  }
 
   Matrix<Double> posRot = Rot3D (2, longitude);
 
@@ -1465,10 +1462,8 @@ void CarmaFiller::fillSpectralWindowTable(Bool use_lsrk)
   MFrequency::Types freqsys_p;
   if (use_lsrk) {
     freqsys_p = MFrequency::LSRK;        // LSRD vs. LSRK
-    cout << "USE_LSRK" << endl;
   } else {
     freqsys_p = MFrequency::LSRD;        // LSRD vs. LSRK
-    cout << "USE_LSRD" << endl;
   }
 
   MFrequency::Convert tolsr(MFrequency::TOPO, 
@@ -1481,7 +1476,6 @@ void CarmaFiller::fillSpectralWindowTable(Bool use_lsrk)
   msPol.flagRow().put(0,False);
 
   // fill out doppler table (only 1 entry needed, CARMA data only identify 1 line :-(
-  cout << "CarmaFiller:: now writing Doppler table " << endl;
   for (i=0; i<win.nspect; i++) {
     ms_p.doppler().addRow();
     msDop.dopplerId().put(i,i);
@@ -1592,8 +1586,6 @@ void CarmaFiller::fillFieldTable()
   Int fld;
   Double cosdec;
 
-  cout << "CarmaFiller::fillFieldTable() adding " << nfield << " fields" << endl;
-
   pm = 0;                       // Proper motion is zero
 
   if (nfield == 0) {            // if no pointings found, say there is 1
@@ -1692,7 +1684,6 @@ void CarmaFiller::fillSourceTable()
     msSource.direction().put(src,radec);
     if (n > 0) {
       Int m=n;
-      cout << "TESTING numlines=" << m << endl;
       Vector<Double> restFreq(m);
       for (Int i=0; i<m; i++)
 	restFreq(i) = win.restfreq[i] * 1e9;    // convert from GHz to Hz
@@ -1707,10 +1698,9 @@ void CarmaFiller::fillSourceTable()
     // missing position/sysvel/transition in the produced MS/SOURCE sub-table ??
 
   }
-
-  cout << "CarmaFiller::fillSourceTable() added " << ns << " sources" << endl;
 }
-
+
+
 // ==============================================================================================
 void CarmaFiller::fillFeedTable() 
 {
@@ -2192,12 +2182,11 @@ int main(int argc, char **argv)
 {
   Bool show_info = False;
 
-  cout << "CarmaFiller::START" << endl;
   try {
     
     // Define inputs
     Input inp(1);
-    inp.version("3 - CARMA to MS filler (18-jun-2010) PJT)");
+    inp.version("4 - PKGW hacked MIRIAD->MS converter");
     inp.create("vis",     "",        "Name of CARMA dataset name",         "string");    
     inp.create("ms",      "",        "Name of MeasurementSet",             "string");    
     inp.create("useTSM",  "True",    "Use the TiledStorageManager",        "bool");        
@@ -2273,14 +2262,13 @@ int main(int argc, char **argv)
     bf.fillFeedTable();
     bf.fixEpochReferences();
     bf.close();
-    cout << "CarmaFiller::close()  Created MeasurementSet " << ms << endl;
   } 
   catch (AipsError x) {
       cerr << x.getMesg() << endl;
   } 
 
-  cout << "CarmaFiller::END" << endl;
-  if (show_info > 0)  show_version_info();
+  if (show_info > 0)
+      show_version_info();
   return 0;
 }
 
