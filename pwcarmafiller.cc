@@ -105,6 +105,8 @@ private:
     bool uv_hasvar (const char *varname);
     char *uv_getstr (const char *varname);
     int uv_getint (const char *varname);
+    double uv_getdouble (const char *varname);
+    void uv_getdoubles (const char *varname, double *dest, int count);
 
     String infile_p;
     Int uv_handle_p;
@@ -216,6 +218,22 @@ CarmaFiller::uv_getint (const char *varname)
 }
 
 
+double
+CarmaFiller::uv_getdouble (const char *varname)
+{
+    double value;
+    uvgetvr_c (uv_handle_p, H_DBLE, varname, (char *) &value, 1);
+    return value;
+}
+
+
+void
+CarmaFiller::uv_getdoubles (const char *varname, double *dest, int count)
+{
+    uvgetvr_c (uv_handle_p, H_DBLE, varname, (char *) dest, count);
+}
+
+
 void
 CarmaFiller::checkInput ()
 {
@@ -238,8 +256,8 @@ CarmaFiller::checkInput ()
 
     // Get the initial array configuration
     nants_p = uv_getint ("nants");
-    uvgetvr_c (uv_handle_p, H_DBLE, "antpos", (char *) antpos, 3 * nants_p);
-    uvgetvr_c (uv_handle_p, H_DBLE, "longitu", (char *) &longitude, 1);
+    uv_getdoubles ("antpos", antpos, 3 * nants_p);
+    longitude = uv_getdouble ("longitu");
 
     // Note: systemp is stored systemp[nants][nwin] in C notation
     if (win.nspect > 0)
@@ -248,8 +266,7 @@ CarmaFiller::checkInput ()
 	uvgetvr_c (uv_handle_p, H_REAL, "wsystemp", (char *) systemp, nants_p);
 
     if (win.nspect > 0)
-	uvgetvr_c (uv_handle_p, H_DBLE, "restfreq", (char *)win.restfreq, win.nspect);
-
+	uv_getdoubles ("restfreq", win.restfreq, win.nspect);
 
     if (uv_hasvar ("project"))
 	project_p = uv_getstr ("project");
@@ -276,11 +293,10 @@ CarmaFiller::checkInput ()
     npol_p = uv_getint ("npol");
     pol_p = uv_getint ("pol");
     uvgetvr_c (uv_handle_p, H_REAL, "inttime", (char *) &inttime_p, 1);
-    uvgetvr_c (uv_handle_p, H_DBLE, "freq", (char *) &freq_p, 1);
-    freq_p *= 1e9; // GHz -> Hz
+    freq_p = uv_getdouble ("freq") * 1e9; // GHz -> Hz
 
-    uvgetvr_c (uv_handle_p, H_DBLE, "ra", (char *) &ra_p, 1);
-    uvgetvr_c (uv_handle_p, H_DBLE, "dec", (char *) &dec_p, 1);
+    ra_p = uv_getdouble ("ra");
+    dec_p = uv_getdouble ("dec");
 
     if (hexists_c (uv_handle_p, "gains"))
 	WARN ("a gains table is present, but this tool cannot apply them");
@@ -1257,7 +1273,7 @@ void CarmaFiller::Tracking(int record)
 
   if (uv_hasvar ("antpos") && record) {
       nants_p = uv_getint ("nants");
-    uvgetvr_c(uv_handle_p,H_DBLE,"antpos",(char *)antpos,3*nants_p);
+      uv_getdoubles ("antpos", antpos, 3 * nants_p);
     if (DEBUG(2)) {
       cout << "Found " << nants_p << " antennas for array "
 	   << nArray_p << endl;
@@ -1315,8 +1331,8 @@ void CarmaFiller::Tracking(int record)
 
   if (source_updated || uv_hasvar ("dra") || uv_hasvar ("ddec")) {
     npoint++;
-    uvgetvr_c(uv_handle_p,H_DBLE,"ra", (char *)&ra_p, 1);
-    uvgetvr_c(uv_handle_p,H_DBLE,"dec",(char *)&dec_p,1);
+    ra_p = uv_getdouble ("ra");
+    dec_p = uv_getdouble ("dec");
     dra_p = ddec_p = 0.;
     object_p = uv_getstr ("source");
 
@@ -1422,17 +1438,17 @@ void CarmaFiller::init_window()
       throw(AipsError("missing nschan"));
 
     if (uv_hasvar ("restfreq"))
-      uvgetvr_c(uv_handle_p,H_DBLE,"restfreq",(char *)win.restfreq, nspect);
+	uv_getdoubles ("restfreq", win.restfreq, nspect);
     else
       throw(AipsError("missing restfreq"));
 
     if (uv_hasvar ("sdf"))
-      uvgetvr_c(uv_handle_p,H_DBLE,"sdf",(char *)win.sdf, nspect);
+	uv_getdoubles ("sdf", win.sdf, nspect);
     else if (nspect>1)
       throw(AipsError("missing sdf"));
 
     if (uv_hasvar ("sfreq"))
-      uvgetvr_c(uv_handle_p,H_DBLE,"sfreq",(char *)win.sfreq, nspect);
+	uv_getdoubles ("sfreq", win.sfreq, nspect);
     else
       throw(AipsError("missing sfreq"));
   }
