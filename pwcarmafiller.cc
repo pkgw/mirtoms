@@ -182,7 +182,6 @@ CarmaFiller::CarmaFiller (String& infile, Int debug_level, Bool apply_tsys, Int 
 
 void CarmaFiller::checkInput()
 {
-  Bool ok=True;
   Int i, nread, nwread, vlen, vupd;
   char vtype[10], vdata[64];
   Float epoch;
@@ -322,10 +321,9 @@ void CarmaFiller::checkInput()
       if (npol_p > 1 && polmode_p == 0) {     // read the next npol-1 scans to find the other pols
 	for (i=1; i<npol_p; i++) {
 	  uvread_c(uv_handle_p, preamble, data, flags, MAXCHAN, &nread);
-	  if (nread <= 0) {
-	    ok = False;
+	  if (nread <= 0)
 	    break;
-	  }
+
 	  uvgetvr_c(uv_handle_p,H_INT,"pol",(char *)&pol_p,1);        // FIX
 	  cout << "POL(" << i+1 << ") = " << pol_p << endl;
 	}
@@ -335,11 +333,8 @@ void CarmaFiller::checkInput()
     }
   }
 
-  if (nvis == 0) {
-    throw(AipsError("CarmaFiller: Bad first uvread: no narrow or wide band data present"));
-    ok = False;
-    return;
-  }
+  if (nvis == 0)
+    throw AipsError ("no narrow or wide band data present");
 
   uvrewind_c(uv_handle_p);
 
