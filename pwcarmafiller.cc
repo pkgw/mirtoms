@@ -105,7 +105,9 @@ private:
     bool uv_hasvar (const char *varname);
     char *uv_getstr (const char *varname);
     int uv_getint (const char *varname);
+    float uv_getfloat (const char *varname);
     double uv_getdouble (const char *varname);
+    void uv_getfloats (const char *varname, float *dest, int count);
     void uv_getdoubles (const char *varname, double *dest, int count);
 
     String infile_p;
@@ -197,7 +199,6 @@ CarmaFiller::uv_hasvar (const char *varname)
     return vupd;
 }
 
-
 char *
 CarmaFiller::uv_getstr (const char *varname)
 {
@@ -206,7 +207,6 @@ CarmaFiller::uv_getstr (const char *varname)
     uvgetvr_c (uv_handle_p, H_BYTE, varname, value, 64);
     return value;
 }
-
 
 int
 CarmaFiller::uv_getint (const char *varname)
@@ -217,6 +217,13 @@ CarmaFiller::uv_getint (const char *varname)
     return value;
 }
 
+float
+CarmaFiller::uv_getfloat (const char *varname)
+{
+    float value;
+    uvgetvr_c (uv_handle_p, H_REAL, varname, (char *) &value, 1);
+    return value;
+}
 
 double
 CarmaFiller::uv_getdouble (const char *varname)
@@ -226,6 +233,11 @@ CarmaFiller::uv_getdouble (const char *varname)
     return value;
 }
 
+void
+CarmaFiller::uv_getfloats (const char *varname, float *dest, int count)
+{
+    uvgetvr_c (uv_handle_p, H_REAL, varname, (char *) dest, count);
+}
 
 void
 CarmaFiller::uv_getdoubles (const char *varname, double *dest, int count)
@@ -238,7 +250,6 @@ void
 CarmaFiller::checkInput ()
 {
     Int i, nread, nwread;
-    Float epoch;
 
     uvread_c (uv_handle_p, preamble, data, flags, MAXCHAN, &nread);
     uvwread_c (uv_handle_p, wdata, wflags, MAXCHAN, &nwread);
@@ -261,9 +272,9 @@ CarmaFiller::checkInput ()
 
     // Note: systemp is stored systemp[nants][nwin] in C notation
     if (win.nspect > 0)
-	uvgetvr_c (uv_handle_p, H_REAL, "systemp", (char *) systemp, nants_p * win.nspect);
+	uv_getfloats ("systemp", systemp, nants_p * win.nspect);
     else
-	uvgetvr_c (uv_handle_p, H_REAL, "wsystemp", (char *) systemp, nants_p);
+	uv_getfloats ("wsystemp", systemp, nants_p);
 
     if (win.nspect > 0)
 	uv_getdoubles ("restfreq", win.restfreq, win.nspect);
@@ -283,8 +294,7 @@ CarmaFiller::checkInput ()
 
     mount_p = 0;
 
-    uvgetvr_c (uv_handle_p, H_REAL, "epoch", (char *) &epoch, 1);
-    epoch_p = epoch;
+    epoch_p = uv_getfloat ("epoch");
     epochRef_p = MDirection::J2000;
     if (nearAbs (epoch_p, 1950.0, 0.01))
 	epochRef_p = MDirection::B1950;
@@ -292,7 +302,7 @@ CarmaFiller::checkInput ()
     // TODO: these should all be handled on-the-fly.
     npol_p = uv_getint ("npol");
     pol_p = uv_getint ("pol");
-    uvgetvr_c (uv_handle_p, H_REAL, "inttime", (char *) &inttime_p, 1);
+    inttime_p = uv_getfloat ("inttime");
     freq_p = uv_getdouble ("freq") * 1e9; // GHz -> Hz
 
     ra_p = uv_getdouble ("ra");
@@ -1268,7 +1278,7 @@ void CarmaFiller::Tracking(int record)
   // here is all the special tracking code...
 
   if (uv_hasvar ("inttime")) {
-    uvgetvr_c(uv_handle_p,H_REAL,"inttime",(char *)&inttime_p,1);
+      inttime_p = uv_getfloat ("inttime");
   }
 
   if (uv_hasvar ("antpos") && record) {
@@ -1287,7 +1297,7 @@ void CarmaFiller::Tracking(int record)
 
   if (win.nspect > 0) {
     if (uv_hasvar ("systemp")) {
-      uvgetvr_c(uv_handle_p,H_REAL,"systemp",(char *)systemp,nants_p*win.nspect);
+	uv_getfloats ("systemp", systemp, nants_p * win.nspect);
       if (DEBUG(3)) {
 	cout << "Found systemps (new scan)" ;
 	for (Int i=0; i<nants_p; i++)  cout << systemp[i] << " ";
@@ -1296,7 +1306,7 @@ void CarmaFiller::Tracking(int record)
     }
   } else {
     if (uv_hasvar ("wsystemp")) {
-      uvgetvr_c(uv_handle_p,H_REAL,"wsystemp",(char *)systemp,nants_p);
+	uv_getfloats ("wsystemp", systemp, nants_p);
       if (DEBUG(3)) {
 	cout << "Found wsystemps (new scan)" ;
 	for (Int i=0; i<nants_p; i++)  cout << systemp[i] << " ";
@@ -1455,9 +1465,9 @@ void CarmaFiller::init_window()
 
   if (nwide > 0 && nwide <= MAXWIDE) {
     if (uv_hasvar ("wfreq"))
-      uvgetvr_c(uv_handle_p,H_REAL,"wfreq",(char *)win.wfreq, nwide);
+	uv_getfloats ("wfreq", win.wfreq, nwide);
     if (uv_hasvar ("wwidth"))
-      uvgetvr_c(uv_handle_p,H_REAL,"wwidth",(char *)win.wwidth, nwide);
+	uv_getfloats ("wwidth", win.wwidth, nwide);
   }
 
   for (i=0; i<nspect; i++) {
