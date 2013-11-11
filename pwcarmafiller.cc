@@ -54,11 +54,9 @@
 
 #include <casa/namespace.h>
 
-
 #ifndef MAXFIELD
 # define MAXFIELD 256 // TODO: kill this hardcoding.
 #endif
-
 
 // Based off of carmafiller, which came from bimafiller, and before that,
 // uvfitsfiller.
@@ -79,140 +77,91 @@ typedef struct window {
     float  wwidth[MAXWIDE];          // width
 } WINDOW;
 
-
-class CarmaFiller
-{
-  // This is an implementation helper class used to store 'local' data
-  // during the filling process.
+class CarmaFiller {
 public:
-  // Create from a miriad (CARMA) dataset (a directory)
-  CarmaFiller(String& infile, Int debug=0,
-	      Bool Qtsys=False,
-	      Bool Qarrays=False,
-	      Int polmode=0);
+    CarmaFiller (String& infile, Int debug=0,
+		 Bool Qtsys=False, Bool Qarrays=False, Int polmode=0);
+    ~CarmaFiller();
 
-  // Standard destructor
-  ~CarmaFiller();
+    void checkInput (Block<Int>& narrow, Block<Int>& window);
+    Bool Debug (int level);
 
-  // Check some of the contents of the data and header read
-  void checkInput(Block<Int>& narrow, Block<Int>& window);
+    void setupMeasurementSet (const String& MSFileName, Bool useTSM);
 
-  // Debug output level
-  Bool Debug(int level);
+    void fillObsTables ();
+    void fillMSMainTable (Bool scan, Int snumbase);
+    void fillAntennaTable ();
+    void fillSyscalTable ();
+    void fillSpectralWindowTable (Bool use_lsrk=True);
+    void fillFieldTable ();
+    void fillSourceTable ();
+    void fillFeedTable ();
 
-  // Set up the MeasurementSet, including StorageManagers and fixed columns.
-  // If useTSM is True, the Tiled Storage Manager will be used to store
-  // DATA, FLAG and WEIGHT_SPECTRUM
-  void setupMeasurementSet(const String& MSFileName, Bool useTSM);
+    void fixEpochReferences ();
 
-  // Fill the Observation and History (formerly ObsLog) tables
-  void fillObsTables();
-
-  // Fill the main table by reading in all the visibilities
-  void fillMSMainTable(Bool scan, Int snumbase);
-
-  // Make an Antenna Table (can be called incrementally now)
-  void fillAntennaTable();
-
-  // Make a Syscal Table (can be called incrementally)
-  void fillSyscalTable();
-
-  // fill Spectralwindow table
-  void fillSpectralWindowTable(Bool use_lsrk=True);
-
-  // fill Field table
-  void fillFieldTable();
-
-  // fill Source table
-  void fillSourceTable();
-
-  // fill the Feed table with minimal info needed for synthesis processing
-  void fillFeedTable();
-
-  // fix up the EPOCH MEASURE_REFERENCE keywords using the value found
-  // in the (last) AN table - check if miriad really needs it
-  void fixEpochReferences();
-
-  void Tracking(int record);
-  void init_window(Block<Int>& narrow, Block<Int>& window);
-  void update_window();
-  void Error(char *msg);
-  void Warning(char *msg);
-  void show();
-  void close();
+    void Tracking (int record);
+    void init_window (Block<Int>& narrow, Block<Int>& window);
+    void update_window ();
+    void Error (char *msg);
+    void Warning (char *msg);
+    void show ();
+    void close ();
 
 private:
-  String                 infile_p;     // filename
-  Int                    uv_handle_p;  // miriad handle
-  MeasurementSet         ms_p;         // the MS itself
-  MSColumns             *msc_p;        // handy pointer to the columns in an MS
-  Int                    debug_p;      // debug level
-  Int                    nIF_p;
-  String                 array_p,
-                         project_p,
-                         object_p,
-                         telescope_p,
-                         observer_p,
-                         version_p,
-                         timsys_p;
-  Vector<Int>            nPixel_p, corrType_p, corrIndex_p;
-  Matrix<Int>            corrProduct_p;
-  Double                 epoch_p;
-  MDirection::Types      epochRef_p;
-  Int                    nArray_p;      // number of arrays (nAnt_p.nelements())
-  Block<Int>             nAnt_p;        // number of antennas per array
-  Block<Vector<Double> > receptorAngle_p;
-  Vector<Double>         arrayXYZ_p;    // needs to be made with 3 elements
-  Vector<Double>         ras_p, decs_p; // ra/dec for source list (source_p)
-  Vector<String>         source_p,      // list of source names (?? object_p ??)
-                         purpose_p;     // purpose of this source
+    String infile_p;
+    Int uv_handle_p;
+    MeasurementSet ms_p;
+    MSColumns *msc_p;
+    Int debug_p;
+    Int nIF_p;
+    String array_p, project_p, object_p, telescope_p,
+	observer_p, version_p, timsys_p;
+    Vector<Int> nPixel_p, corrType_p, corrIndex_p;
+    Matrix<Int> corrProduct_p;
+    Double epoch_p;
+    MDirection::Types epochRef_p;
+    Int nArray_p;
+    Block<Int> nAnt_p;
+    Block<Vector<Double> > receptorAngle_p;
+    Vector<Double> arrayXYZ_p; // 3 elements
+    Vector<Double> ras_p, decs_p; // ra/dec for source list (source_p)
+    Vector<String> source_p, purpose_p; // list of source names (?? object_p ??)
 
+    // the following variables are for miriad, hence not Double/Int/Float
 
-  // the following variables are for miriad, hence not Double/Int/Float
-  // thus the code may have to be fixed on machines where these do not
-  // agree ... may need special access code to get those into CASA
-  // types on 64 bit machines??
+    double preamble[5], first_time;
+    int ifield, nfield, npoint, nsource;     // both dra/ddec should become Vector's
+    float dra[MAXFIELD], ddec[MAXFIELD];       // offset in radians
+    double ra[MAXFIELD], dec[MAXFIELD];
+    int field[MAXFIELD];                     // source index
+    int fcount[MAXFIELD], sid_p[MAXFIELD];
+    float dra_p, ddec_p;
+    int pol_p;
 
-  double preamble[5], first_time;
-  int    ifield, nfield, npoint, nsource;     // both dra/ddec should become Vector's
-  float  dra[MAXFIELD], ddec[MAXFIELD];       // offset in radians
-  double ra[MAXFIELD], dec[MAXFIELD];
-  int    field[MAXFIELD];                     // source index
-  int    fcount[MAXFIELD], sid_p[MAXFIELD];
-  float  dra_p, ddec_p;
-  int    pol_p;
-
-  // The following items more or less follow the uv variables in a dataset
     Vector<Int> polmapping;
-    Int    nants_p, nants_offset_p, nchan_p, nwide_p, npol_p, polmode_p;
-  Double antpos[3*MAXANT];
-  double longitude;
-  Float  phasem1[MAXANT];
-  Double ra_p, dec_p;       // current pointing center RA,DEC at EPOCH
-  Float  inttime_p;
-  Double freq_p;            // rest frequency of the primary line
-  Int    mount_p;
-  Double time_p;            // current MJD time
+    Int nants_p, nants_offset_p, nchan_p, nwide_p, npol_p, polmode_p;
+    Double antpos[3*MAXANT];
+    double longitude;
+    Float phasem1[MAXANT];
+    Double ra_p, dec_p;       // current pointing center RA,DEC at EPOCH
+    Float inttime_p;
+    Double freq_p;            // rest frequency of the primary line
+    Int mount_p;
+    Double time_p;            // current MJD time
 
-  // MIRIAD spectral window definition
-  WINDOW win;
-  Bool   Qtsys_p;    /* tsys weight's */
-  Bool   Qarrays_p;  /* write separate arrays */
+    WINDOW win;
+    Bool Qtsys_p;    /* tsys weights */
+    Bool Qarrays_p;  /* write separate arrays */
 
-  // Data buffers.... again in MIRIAD format
-
-  float  data[2*MAXCHAN], wdata[2*MAXCHAN];	// 2*MAXCHAN since (Re,Im) pairs complex numbers
-  int    flags[MAXCHAN], wflags[MAXCHAN];
-  float  systemp[MAXANT*MAXWIDE];
-  int    zero_tsys;
-
-  // Counters
-  int    nvis;
+    float data[2*MAXCHAN], wdata[2*MAXCHAN];	// 2*MAXCHAN since (Re,Im) pairs complex numbers
+    int flags[MAXCHAN], wflags[MAXCHAN];
+    float systemp[MAXANT*MAXWIDE];
+    int zero_tsys;
+    int nvis;
 };
 
-// ==============================================================================================
-CarmaFiller::CarmaFiller(String& infile, Int debug,
-			 Bool Qtsys, Bool Qarrays, Int polmode)
+
+CarmaFiller::CarmaFiller (String& infile, Int debug, Bool Qtsys, Bool Qarrays, Int polmode)
 {
   infile_p = infile;
   debug_p = debug;
