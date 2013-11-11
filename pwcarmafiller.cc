@@ -178,6 +178,7 @@ CarmaFiller::CarmaFiller (String& infile, Int debug_level, Bool apply_tsys)
 
 
 #define DEBUG(level) (this->debug_level >= (level))
+#define WARN(message) (cerr << "warning: " << message << endl);
 
 
 void 
@@ -255,11 +256,11 @@ CarmaFiller::checkInput ()
     uvgetvr_c (uv_handle_p, H_DBLE, "dec", (char *) &dec_p, 1);
 
     if (hexists_c (uv_handle_p, "gains"))
-	cout << "Warning: gains table present, but cannot apply them" << endl;
+	WARN ("a gains table is present, but this tool cannot apply them");
     if (hexists_c (uv_handle_p, "bandpass"))
-	cout << "Warning: bandpass table present, but cannot apply them" << endl;
+	WARN ("a bandpass table is present, but this tool cannot apply them");
     if (hexists_c (uv_handle_p, "leakage"))
-	cout << "Warning: leakage table present, but cannot apply them" << endl;
+	WARN ("a leakage table is present, but this tool cannot apply them");
 
     uvrewind_c (uv_handle_p);
 
@@ -746,8 +747,8 @@ void CarmaFiller::fillAntennaTable()
     arrayXYZ_p(1) = -4482068.56252;
     arrayXYZ_p(2) =  3843528.41479;
   } else {
-    cout << "Warning: unknown array position for "<<telescope_name<<endl;
-    arrayXYZ_p = 0.0;
+      WARN ("no hardcoded array position available for name " << telescope_name);
+      arrayXYZ_p = 0.0;
   }
   if(DEBUG(3)) cout << "number of antennas ="<<nAnt<<endl;
   if(DEBUG(3)) cout << "array ref pos:"<<arrayXYZ_p<<endl;
@@ -1010,7 +1011,7 @@ void CarmaFiller::fillFieldTable()
   pm = 0;                       // Proper motion is zero
 
   if (nfield == 0) {            // if no pointings found, say there is 1
-    cout << "Warning: no dra/ddec pointings found, creating 1." << endl;
+      WARN ("no dra/ddec pointings found; creating one");
     nfield = npoint = 1;
     dra[0] = ddec[0] = 0.0;
   }
@@ -1248,7 +1249,6 @@ void CarmaFiller::Tracking(int record)
                 antpos[i+nants_p*2] << endl;
       }
     }
-    if (DEBUG(2)) cout << "Warning: antpos changed at record " << record << endl;
   }
 
   if (win.nspect > 0) {
@@ -1362,11 +1362,6 @@ void CarmaFiller::Tracking(int record)
     } else {
       ifield = k;
     }
-
-    if (DEBUG(3)) cout << "Warning: pointing " << j
-        << " (dra/ddec) changed at record " << record << " : "
-        << dra_p *206264.8062 << " "
-        << ddec_p*206264.8062 << endl;
   }
 }
 
