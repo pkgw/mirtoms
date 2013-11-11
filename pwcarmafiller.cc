@@ -80,7 +80,7 @@ typedef struct window {
 class CarmaFiller {
 public:
     CarmaFiller (String& infile, Int debug=0,
-		 Bool Qtsys=False, Bool Qarrays=False, Int polmode=0);
+		 Bool apply_tsys=False, Bool Qarrays=False, Int polmode=0);
 
     void checkInput ();
     Bool Debug (int level);
@@ -143,7 +143,7 @@ private:
     Double time_p;            // current MJD time
 
     WINDOW win;
-    Bool Qtsys_p;    /* tsys weights */
+    Bool apply_tsys;    /* tsys weights */
     Bool Qarrays_p;  /* write separate arrays */
 
     float data[2*MAXCHAN], wdata[2*MAXCHAN];	// 2*MAXCHAN since (Re,Im) pairs complex numbers
@@ -154,14 +154,14 @@ private:
 };
 
 
-CarmaFiller::CarmaFiller (String& infile, Int debug, Bool Qtsys, Bool Qarrays, Int polmode)
+CarmaFiller::CarmaFiller (String& infile, Int debug, Bool apply_tsys, Bool Qarrays, Int polmode)
 {
     infile_p = infile;
     debug_p = debug;
     nArray_p = 0;
     nfield = 0;
     npoint = 0;
-    Qtsys_p = Qtsys;
+    this->apply_tsys = apply_tsys;
     Qarrays_p = Qarrays;
     polmode_p = polmode;
     zero_tsys = 0;
@@ -769,10 +769,11 @@ void CarmaFiller::fillMSMainTable(Bool scan, Int snumbase)
 		msc.processorId().put(row,-1);
 		msc.observationId().put(row,0);
 		msc.stateId().put(row,-1);
-		if (!Qtsys_p) {
-		    Vector<Float> tmp(nCorr); tmp=1.0;
-		    msc.weight().put(row,tmp);
-		    msc.sigma().put(row,tmp);
+		if (!apply_tsys) {
+		    Vector<Float> tmp(nCorr);
+		    tmp = 1.0;
+		    msc.weight ().put (row, tmp);
+		    msc.sigma ().put (row, tmp);
 		}
 	    }
 	    msc.exposure().put(row,interval);
@@ -806,18 +807,20 @@ void CarmaFiller::fillMSMainTable(Bool scan, Int snumbase)
 	    msc.antenna2().put(row,ant2);
 	    msc.time().put(row,time);           // CARMA did begin of scan.., now middle (2009)
 	    msc.timeCentroid().put(row,time);   // do we really need this ? flagging/blanking ?
-	    if (Qtsys_p) {
-		// Vector<Float> w1(nCorr), w2(nCorr);
-		w2 = 1.0;   // i use this as a 'version' id  to test FC refresh bugs :-)
-		if( systemp[ant1] == 0 || systemp[ant2] == 0) {
+
+	    if (apply_tsys) {
+		w2 = 1.0; // "i use this as a 'version' id  to test FC refresh bugs :-)"
+
+		if (systemp[ant1] == 0 || systemp[ant2] == 0) {
 		    zero_tsys++;
 		    w1 = 0.0;
 		} else
-		    w1 = 1.0/sqrt((double)(systemp[ant1]*systemp[ant2]));
-		if (Debug(1)) cout << w1 << " " << w2 << endl;
-		msc.weight().put(row,w1);
-		msc.sigma().put(row,w2);
+		    w1 = 1.0 / sqrt ((double) (systemp[ant1]*systemp[ant2]));
+
+		msc.weight ().put (row, w1);
+		msc.sigma ().put (row, w2);
 	    }
+
 	    msc.uvw().put(row,uvw);
 	    msc.arrayId().put(row,nArray_p-1);
 	    msc.dataDescId().put(row,ifno);
@@ -1647,7 +1650,7 @@ main(int argc, char **argv)
 	if (ms == "")
 	    ms = vis.before ('.') + ".ms";
 
-	Bool Qtsys   =  inp.getBool ("tsys");
+	Bool apply_tsys = inp.getBool ("tsys");
 	Bool Qarrays =  inp.getBool ("arrays"); // debug
 	Bool Qlsrk    = inp.getBool ("lsrk"); // LSRK or LSRD
 	Int  polmode  = inp.getInt ("polmode");
@@ -1662,7 +1665,7 @@ main(int argc, char **argv)
 	    }
 	}
 
-	CarmaFiller cf (vis, debug, Qtsys, Qarrays, polmode);
+	CarmaFiller cf (vis, debug, apply_tsys, Qarrays, polmode);
 
 	cf.checkInput ();
 	cf.setupMeasurementSet (ms);
