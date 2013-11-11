@@ -55,6 +55,11 @@
 #include <casa/namespace.h>
 
 
+#ifndef MAXFIELD
+# define MAXFIELD 256 // TODO: kill this hardcoding.
+#endif
+
+
 // Based off of carmafiller, which came from bimafiller, and before that,
 // uvfitsfiller.
 
@@ -74,20 +79,7 @@ typedef struct window {
     float  wwidth[MAXWIDE];          // width
 } WINDOW;
 
-//  the maximum number of fields in mosaicing observations, careful, miriad
-//  often has a smaller value, like 64 or 128.
-#ifndef MAXFIELD
-# define MAXFIELD  256
-#endif
 
-#ifndef MAXMSG
-# define MAXMSG 256
-#endif
-
-// LSRK vs. LSRD
-#define USE_LSRK
-
-void cause_coredump(void);
 
 
 // helper functions
@@ -263,8 +255,6 @@ private:
   int    fcount[MAXFIELD], sid_p[MAXFIELD];
   float  dra_p, ddec_p;
   int    pol_p;
-  char   message[MAXMSG];
-
 
   // The following items more or less follow the uv variables in a dataset
     Vector<Int> polmapping;
@@ -2195,12 +2185,4 @@ int main(int argc, char **argv)
   if (show_info > 0)
       show_version_info();
   return 0;
-}
-
-void cause_coredump(void)
-{
-  char *p;
-
-  p = 0;
-  *p = 0;
 }
