@@ -1615,7 +1615,7 @@ void CarmaFiller::init_window()
 
 
 int
-main(int argc, char **argv)
+main (int argc, char **argv)
 {
     try {
 	Input inp (1);
@@ -1638,17 +1638,13 @@ main(int argc, char **argv)
 	    ms = vis.before ('.') + ".ms";
 
 	Bool apply_tsys = inp.getBool ("tsys");
-	Int  polmode  = inp.getInt ("polmode");
-	Int  snumbase = inp.getInt ("snumbase");
+	Int polmode = inp.getInt ("polmode");
+	Int snumbase = inp.getInt ("snumbase");
 
-	Int i, debug = -1;
-
-	for (i = 0; i < 99; i++) { // I don't understand what's going on here.
-	    if (!inp.debug (i)) {
-		debug = i - 1;
-		break;
-	    }
-	}
+	// I don't understand what's going on here:
+	int debug = -1;
+	while (inp.debug (debug + 1))
+	    debug++;
 
 	CarmaFiller cf (vis, debug, apply_tsys, polmode);
 
