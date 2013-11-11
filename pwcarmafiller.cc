@@ -79,13 +79,10 @@ typedef struct window {
 
 class CarmaFiller {
 public:
-    CarmaFiller (String& infile, Int debug_level=0,
-		 Bool apply_tsys=False, Int polmode=0);
+    CarmaFiller (String& infile, Int debug_level=0, Bool apply_tsys=False);
 
     void checkInput ();
-
     void setupMeasurementSet (const String& MSFileName);
-
     void fillObsTables ();
     void fillMSMainTable (Bool scan, Int snumbase);
     void fillAntennaTable ();
@@ -94,13 +91,12 @@ public:
     void fillFieldTable ();
     void fillSourceTable ();
     void fillFeedTable ();
-
     void fixEpochReferences ();
 
+private:
     void Tracking (int record);
     void init_window ();
 
-private:
     String infile_p;
     Int uv_handle_p;
     MeasurementSet ms_p;
@@ -132,7 +128,7 @@ private:
     int pol_p;
 
     Vector<Int> polmapping;
-    Int nants_p, nants_offset_p, nchan_p, nwide_p, npol_p, polmode_p;
+    Int nants_p, nants_offset_p, nchan_p, nwide_p, npol_p;
     Double antpos[3*MAXANT];
     double longitude;
     Double ra_p, dec_p;       // current pointing center RA,DEC at EPOCH
@@ -152,7 +148,7 @@ private:
 };
 
 
-CarmaFiller::CarmaFiller (String& infile, Int debug_level, Bool apply_tsys, Int polmode)
+CarmaFiller::CarmaFiller (String& infile, Int debug_level, Bool apply_tsys)
 {
     infile_p = infile;
     nArray_p = 0;
@@ -160,7 +156,6 @@ CarmaFiller::CarmaFiller (String& infile, Int debug_level, Bool apply_tsys, Int 
     npoint = 0;
     this->debug_level = debug_level;
     this->apply_tsys = apply_tsys;
-    polmode_p = polmode;
     zero_tsys = 0;
 
     for (int i = 0; i < MAXFIELD; i++)
@@ -318,17 +313,6 @@ void CarmaFiller::checkInput()
       if (hexists_c(uv_handle_p,"leakage"))
         cout << "Warning: leakage table present, but cannot apply them" << endl;
 
-      if (npol_p > 1 && polmode_p == 0) {     // read the next npol-1 scans to find the other pols
-	for (i=1; i<npol_p; i++) {
-	  uvread_c(uv_handle_p, preamble, data, flags, MAXCHAN, &nread);
-	  if (nread <= 0)
-	    break;
-
-	  uvgetvr_c(uv_handle_p,H_INT,"pol",(char *)&pol_p,1);        // FIX
-	  cout << "POL(" << i+1 << ") = " << pol_p << endl;
-	}
-      }
-      // only do one scan
       break; // we only do work on the first visibility! could get max npol by brute force
     }
   }
@@ -340,54 +324,19 @@ void CarmaFiller::checkInput()
 
   int numCorr;
 
-  if (polmode_p == 0) {
-      numCorr = npol_p;
-      corrType_p.resize (numCorr);
-
-      for (i=0; i < 1; i++) {
-	  // note: 1-based ref pix
-	  corrType_p(i)=pol_p;            // 1 pol !!!!
-	  // convert AIPS-convention Stokes description to CASA enum
-	  // CHECK if these are really the right conversions for CASA
-	  if (corrType_p(i)<0) {
-	      if (corrType_p(i)==-8) corrType_p(i)=Stokes::YX;
-	      if (corrType_p(i)==-7) corrType_p(i)=Stokes::XY;
-	      if (corrType_p(i)==-6) corrType_p(i)=Stokes::YY;
-	      if (corrType_p(i)==-5) corrType_p(i)=Stokes::XX;
-	      if (corrType_p(i)==-4) corrType_p(i)=Stokes::LR;
-	      if (corrType_p(i)==-3) corrType_p(i)=Stokes::RL;
-	      if (corrType_p(i)==-2) corrType_p(i)=Stokes::LL;
-	      if (corrType_p(i)==-1) corrType_p(i)=Stokes::RR;
-	  }
-      }
-
-      Vector<Int> tmp(numCorr); tmp=corrType_p;
-      // Sort the polarizations to standard order
-      GenSort<Int>::sort(corrType_p);
-      corrIndex_p.resize(numCorr);
-      // Get the sort indices to rearrange the data to standard order
-      for (i=0;i<numCorr;i++) {
-	  for (Int j=0;j<numCorr;j++) {
-	      if (corrType_p(j)==tmp(i)) corrIndex_p(i)=j;
-	  }
-      }
-      polmapping.resize (13);
-      polmapping = 0;
-  } else if (polmode_p == 1) {
-      // Full-Stokes XY pol
-      numCorr = npol_p = 4;
-      corrType_p.resize (4);
-      corrType_p(0) = Stokes::XX;
-      corrType_p(1) = Stokes::XY;
-      corrType_p(2) = Stokes::YX;
-      corrType_p(3) = Stokes::YY;
-      polmapping.resize (13);
-      polmapping = -1;
-      polmapping(-5 + 8) = 0;
-      polmapping(-6 + 8) = 3;
-      polmapping(-7 + 8) = 1;
-      polmapping(-8 + 8) = 2;
-  }
+  // Full-Stokes XY pol
+  numCorr = npol_p = 4;
+  corrType_p.resize (4);
+  corrType_p(0) = Stokes::XX;
+  corrType_p(1) = Stokes::XY;
+  corrType_p(2) = Stokes::YX;
+  corrType_p(3) = Stokes::YY;
+  polmapping.resize (13);
+  polmapping = -1;
+  polmapping(-5 + 8) = 0;
+  polmapping(-6 + 8) = 3;
+  polmapping(-7 + 8) = 1;
+  polmapping(-8 + 8) = 2;
 
   // Figure out the correlation products from the polarizations
   corrProduct_p.resize(2,numCorr); corrProduct_p=0;
@@ -1612,8 +1561,8 @@ main (int argc, char **argv)
 	inp.create ("vis",     "",        "Name of CARMA dataset name",         "string");
 	inp.create ("ms",      "",        "Name of MeasurementSet",             "string");
 	inp.create ("tsys",    "False",   "Fill WEIGHT from Tsys in data?",     "bool");
-	inp.create ("polmode", "0",       "0 = single pol; 1 = Full XY",        "int");
 	inp.create ("snumbase","0",       "Starting SCAN_NUMBER value",         "int");
+	inp.create ("polmode", "0",       "(deprecated; ignored)",              "int");
 	inp.readArguments (argc, argv);
 
 	String vis (inp.getString ("vis"));
@@ -1627,7 +1576,6 @@ main (int argc, char **argv)
 	    ms = vis.before ('.') + ".ms";
 
 	Bool apply_tsys = inp.getBool ("tsys");
-	Int polmode = inp.getInt ("polmode");
 	Int snumbase = inp.getInt ("snumbase");
 
 	// I don't understand what's going on here:
@@ -1635,7 +1583,7 @@ main (int argc, char **argv)
 	while (inp.debug (debug + 1))
 	    debug++;
 
-	CarmaFiller cf (vis, debug, apply_tsys, polmode);
+	CarmaFiller cf (vis, debug, apply_tsys);
 
 	cf.checkInput ();
 	cf.setupMeasurementSet (ms);
