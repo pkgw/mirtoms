@@ -1664,88 +1664,80 @@ void CarmaFiller::init_window(Block<Int>& narrow, Block<Int>& window)
 }
 
 
-int main(int argc, char **argv)
+int
+main(int argc, char **argv)
 {
-  try {
+    try {
+	Input inp (1);
+	inp.version ("4 - PKGW hacked MIRIAD->MS converter");
+	inp.create ("vis",     "",        "Name of CARMA dataset name",         "string");
+	inp.create ("ms",      "",        "Name of MeasurementSet",             "string");
+	inp.create ("useTSM",  "True",    "Use the TiledStorageManager",        "bool");
+	inp.create ("narrow",  "all",     "Which of the narrow band windows",   "string");
+	inp.create ("win",     "all",     "Which of the window averages",       "string");
+	inp.create ("tsys",    "False",   "Fill WEIGHT from Tsys in data?",     "bool");
+	inp.create ("arrays",  "False",   "DEBUG: Split multiple arrays?",      "bool");
+	inp.create ("lsrk",    "True",    "Use LSRK (instead of LSRD)?",        "bool");
+	inp.create ("polmode", "0",       "0 = single pol; 1 = Full XY",        "int");
+	inp.create ("snumbase","0",       "Starting SCAN_NUMBER value",         "int");
+	inp.readArguments (argc, argv);
 
-    // Define inputs
-    Input inp(1);
-    inp.version("4 - PKGW hacked MIRIAD->MS converter");
-    inp.create("vis",     "",        "Name of CARMA dataset name",         "string");
-    inp.create("ms",      "",        "Name of MeasurementSet",             "string");
-    inp.create("useTSM",  "True",    "Use the TiledStorageManager",        "bool");
-    inp.create("narrow",  "all",     "Which of the narrow band windows",   "string");
-    inp.create("win",     "all",     "Which of the window averages",       "string");
-    inp.create("tsys",    "False",   "Fill WEIGHT from Tsys in data?",     "bool");
-    inp.create("arrays",  "False",   "DEBUG: Split multiple arrays?",      "bool");
-    inp.create("lsrk",    "True",    "Use LSRK (instead of LSRD)?",        "bool");
-    inp.create("polmode", "0",       "0 = single pol; 1 = Full XY",        "int");
-    inp.create("snumbase","0",       "Starting SCAN_NUMBER value",         "int");
-    inp.readArguments(argc, argv);
+	String vis (inp.getString ("vis"));
+	if (vis == "")
+	    throw AipsError ("No input path (vis=) given");
+	if (! File (vis).isDirectory ())
+	    throw AipsError ("Input path does not refer to a directory");
 
-    String vis(inp.getString("vis"));
-    if (vis=="")
-      throw(AipsError("No input file vis= given"));
+	String ms (inp.getString ("ms"));
+	if (ms == "")
+	    ms = vis.before ('.') + ".ms";
 
-    String ms(inp.getString("ms"));
-    if(ms=="") ms=vis.before('.') + ".ms";
+	Bool useTSM  =  inp.getBool ("useTSM"); // historic: we used to use UseISM
+	Bool Qtsys   =  inp.getBool ("tsys");
+	Bool Qarrays =  inp.getBool ("arrays"); // debug
+	Bool Qlsrk    = inp.getBool ("lsrk"); // LSRK or LSRD
+	Int  polmode  = inp.getInt ("polmode");
+	Int  snumbase = inp.getInt ("snumbase");
 
-    Bool useTSM  =  inp.getBool("useTSM");      // historic: we used to use UseISM
-    Bool Qtsys   =  inp.getBool("tsys");        //
-    Bool Qarrays =  inp.getBool("arrays");      // debug
-    Bool Qlsrk    = inp.getBool("lsrk");        // LSRK or LSRD
-    Int  polmode  = inp.getInt("polmode");
-    Int  snumbase = inp.getInt("snumbase");
+	Int i, debug = -1;
+	Block<Int> narrow, win;
 
-    File t(vis);                                // only used for sanity checks
-    Int i, debug = -1;
-    Block<Int> narrow, win;
+	for (i = 0; i < 99; i++) { // I don't understand what's going on here.
+	    if (!inp.debug (i)) {
+		debug = i - 1;
+		break;
+	    }
+	}
 
-    for (i=0; i<99; i++)      // hmm, must this be so hard ??
-      if  (!inp.debug(i)) {
-        debug = i-1;
-        break;
-      }
+	if (inp.getString ("narrow") == "all") {
+	    narrow.resize (1);
+	    narrow[0] = -1;
+	} else
+	    narrow = inp.getIntArray ("narrow");
 
-    if (!t.isDirectory())
-      throw(AipsError("Input file does not appear to be miriad dataset"));
+	if (inp.getString ("win") == "all") {
+	    win.resize (1);
+	    win[0] = -1;
+	} else
+	    win = inp.getIntArray ("win");
 
-    if (inp.getString("narrow") == "all") {
-      narrow.resize(1);
-      narrow[0] = -1;
-    } else
-      narrow = inp.getIntArray("narrow");
+	CarmaFiller cf (vis, debug, Qtsys, Qarrays, polmode);
 
-    if (inp.getString("win") == "all") {
-      win.resize(1);
-      win[0] = -1;
-    } else
-      win = inp.getIntArray("win");
+	cf.checkInput (narrow, win);
+	cf.setupMeasurementSet (ms, useTSM);
+	cf.fillObsTables ();
+	cf.fillAntennaTable ();
+	cf.fillMSMainTable (True, snumbase);
+	cf.fillSyscalTable ();
+	cf.fillSpectralWindowTable (Qlsrk);
+	cf.fillFieldTable ();
+	cf.fillSourceTable ();
+	cf.fillFeedTable ();
+	cf.fixEpochReferences ();
+    } catch (AipsError x) {
+	cerr << x.getMesg() << endl;
+	return 1;
+    }
 
-    CarmaFiller bf(vis,debug,Qtsys,Qarrays,polmode);
-
-    bf.checkInput(narrow,win);
-    bf.setupMeasurementSet(ms,useTSM);
-    bf.fillObsTables();
-    bf.fillAntennaTable();    // put first array in place
-
-
-    // fill the main table
-    bf.fillMSMainTable(True, snumbase);        // first scan it
-    //    bf.fillMSMainTable(False);  // then fill it
-
-
-    // fill remaining tables
-    bf.fillSyscalTable();
-    bf.fillSpectralWindowTable(Qlsrk);
-    bf.fillFieldTable();
-    bf.fillSourceTable();
-    bf.fillFeedTable();
-    bf.fixEpochReferences();
-  }
-  catch (AipsError x) {
-      cerr << x.getMesg() << endl;
-  }
-
-  return 0;
+    return 0;
 }
