@@ -102,6 +102,8 @@ private:
     void Tracking (int record);
     void init_window ();
 
+    bool uv_hasvar (const char *varname);
+
     String infile_p;
     Int uv_handle_p;
     MeasurementSet ms_p;
@@ -180,12 +182,23 @@ CarmaFiller::CarmaFiller (String& infile, Int debug_level, Bool apply_tsys)
 #define DEBUG(level) (this->debug_level >= (level))
 #define WARN(message) (cerr << "warning: " << message << endl);
 
+bool
+CarmaFiller::uv_hasvar (const char *varname)
+{
+    /* Also tests whether the variable has been updated if it's being tracked. */
+    int vupd, vlen;
+    char vtype[10];
+
+    uvprobvr_c (uv_handle_p, varname, vtype, &vlen, &vupd);
+    return vupd;
+}
+
 
 void 
 CarmaFiller::checkInput ()
 {
-    Int i, nread, nwread, vlen, vupd;
-    char vtype[10], vdata[64];
+    Int i, nread, nwread;
+    char vdata[64];
     Float epoch;
 
     uvread_c (uv_handle_p, preamble, data, flags, MAXCHAN, &nread);
@@ -217,8 +230,7 @@ CarmaFiller::checkInput ()
 	uvgetvr_c (uv_handle_p, H_DBLE, "restfreq", (char *)win.restfreq, win.nspect);
 
 
-    uvprobvr_c (uv_handle_p, "project", vtype, &vlen, &vupd);
-    if (vupd) {
+    if (uv_hasvar ("project")) {
 	uvgetvr_c (uv_handle_p, H_BYTE, "project", vdata, 32);
 	project_p = vdata;
     } else
@@ -230,8 +242,7 @@ CarmaFiller::checkInput ()
     uvgetvr_c (uv_handle_p, H_BYTE, "telescop", vdata, 10);
     telescope_name = vdata;
 
-    uvprobvr_c (uv_handle_p, "observer", vtype, &vlen, &vupd);
-    if (vupd) {
+    if (uv_hasvar ("observer")) {
 	uvgetvr_c (uv_handle_p, H_BYTE, "observer", vdata, 10);
 	observer_name = vdata;
     } else
@@ -1185,11 +1196,8 @@ void CarmaFiller::Tracking(int record)
 {
   if (DEBUG(3)) cout << "CarmaFiller::Tracking" << endl;
 
-  char vtype[10], vdata[10];
-  int vlen, vupd, vupd1, vupd2, i, j, k;
-  //  float dx, dy;
-  //  Float rdat;
-  //  Double ddat;
+  char vdata[10];
+  int i, j, k;
 
   if (record < 0) {                 // first time around: set variables to track
     uvtrack_c(uv_handle_p,"nschan","u");   // narrow lines
@@ -1227,13 +1235,11 @@ void CarmaFiller::Tracking(int record)
 
   // here is all the special tracking code...
 
-  uvprobvr_c(uv_handle_p,"inttime",vtype,&vlen,&vupd);
-  if (vupd) {
+  if (uv_hasvar ("inttime")) {
     uvgetvr_c(uv_handle_p,H_REAL,"inttime",(char *)&inttime_p,1);
   }
 
-  uvprobvr_c(uv_handle_p,"antpos",vtype,&vlen,&vupd);
-  if (vupd && record) {
+  if (uv_hasvar ("antpos") && record) {
     uvgetvr_c(uv_handle_p,H_INT, "nants", (char *)&nants_p,1);
     uvgetvr_c(uv_handle_p,H_DBLE,"antpos",(char *)antpos,3*nants_p);
     if (DEBUG(2)) {
@@ -1248,8 +1254,7 @@ void CarmaFiller::Tracking(int record)
   }
 
   if (win.nspect > 0) {
-    uvprobvr_c(uv_handle_p,"systemp",vtype,&vlen,&vupd);
-    if (vupd) {
+    if (uv_hasvar ("systemp")) {
       uvgetvr_c(uv_handle_p,H_REAL,"systemp",(char *)systemp,nants_p*win.nspect);
       if (DEBUG(3)) {
 	cout << "Found systemps (new scan)" ;
@@ -1258,8 +1263,7 @@ void CarmaFiller::Tracking(int record)
       }
     }
   } else {
-    uvprobvr_c(uv_handle_p,"wsystemp",vtype,&vlen,&vupd);
-    if (vupd) {
+    if (uv_hasvar ("wsystemp")) {
       uvgetvr_c(uv_handle_p,H_REAL,"wsystemp",(char *)systemp,nants_p);
       if (DEBUG(3)) {
 	cout << "Found wsystemps (new scan)" ;
@@ -1270,9 +1274,9 @@ void CarmaFiller::Tracking(int record)
   }
 
   // SOURCE and DRA/DDEC are mixed together they define a row in the FIELD table
+  int source_updated = uv_hasvar ("source");
 
-  uvprobvr_c(uv_handle_p,"source",vtype,&vlen,&vupd);
-  if (vupd) {
+  if (source_updated) {
     uvgetvr_c(uv_handle_p,H_BYTE,"source",vdata,10);
     object_p = vdata;
 
@@ -1295,15 +1299,10 @@ void CarmaFiller::Tracking(int record)
 
   }
 
-  uvprobvr_c(uv_handle_p,"dra", vtype,&vlen,&vupd1);
-  uvprobvr_c(uv_handle_p,"ddec",vtype,&vlen,&vupd2);
-
-  if (vupd || vupd1 || vupd2) {    // if either source or offset changed, find FIELD_ID
+  if (source_updated || uv_hasvar ("dra") || uv_hasvar ("ddec")) {
     npoint++;
     uvgetvr_c(uv_handle_p,H_DBLE,"ra", (char *)&ra_p, 1);
     uvgetvr_c(uv_handle_p,H_DBLE,"dec",(char *)&dec_p,1);
-    //uvgetvr_c(uv_handle_p,H_REAL,"dra", (char *)&dra_p,  1);
-    //uvgetvr_c(uv_handle_p,H_REAL,"ddec",(char *)&ddec_p, 1);
     dra_p = ddec_p = 0.;
     uvgetvr_c(uv_handle_p,H_BYTE,"source",vdata,10);
     object_p = vdata;  // also track object name whenever changed
@@ -1374,74 +1373,62 @@ void CarmaFiller::init_window()
 {
   if (DEBUG(1)) cout << "CarmaFiller::init_window" << endl;
 
-  char vtype[10];
-  int i, idx, vlen, vupd, nchan, nspect, nwide;
+  int i, idx, nchan, nspect, nwide;
 
-  uvprobvr_c(uv_handle_p,"nchan",vtype,&vlen,&vupd);
-  if (vupd) {
+  if (uv_hasvar ("nchan")) {
     uvrdvr_c(uv_handle_p,H_INT,"nchan",(char *)&nchan, NULL, 1);
   } else {
     nchan = 0;
     if (DEBUG(1)) cout << "nchan = 0" << endl;
   }
 
-  uvprobvr_c(uv_handle_p,"nspect",vtype,&vlen,&vupd);
-  if (vupd) {
+  if (uv_hasvar ("nspect")) {
     uvrdvr_c(uv_handle_p,H_INT,"nspect",(char *)&nspect, NULL, 1);
     win.nspect = nspect;
   } else
     win.nspect = nspect = 0;
 
-  uvprobvr_c(uv_handle_p,"nwide",vtype,&vlen,&vupd);
-  if (vupd) {
+  if (uv_hasvar ("nwide")) {
     uvrdvr_c(uv_handle_p,H_INT,"nwide",(char *)&nwide, NULL, 1);
     win.nwide = nwide;
   } else
     win.nwide = nwide = 0;
 
   if (nspect > 0 && nspect <= MAXWIN) {
-
-    uvprobvr_c(uv_handle_p,"ischan",vtype,&vlen,&vupd);
-    if (vupd)
+    if (uv_hasvar ("ischan"))
       uvgetvr_c(uv_handle_p,H_INT,"ischan",(char *)win.ischan, nspect);
     else if (nspect==1)
       win.ischan[0] = 1;
     else
       throw(AipsError("missing ischan"));
 
-    uvprobvr_c(uv_handle_p,"nschan",vtype,&vlen,&vupd);
-    if (vupd)
+    if (uv_hasvar ("nschan"))
       uvgetvr_c(uv_handle_p,H_INT,"nschan",(char *)win.nschan, nspect);
     else if (nspect==1)
       win.nschan[0] = nchan_p;
     else
       throw(AipsError("missing nschan"));
 
-    uvprobvr_c(uv_handle_p,"restfreq",vtype,&vlen,&vupd);
-    if (vupd)
+    if (uv_hasvar ("restfreq"))
       uvgetvr_c(uv_handle_p,H_DBLE,"restfreq",(char *)win.restfreq, nspect);
     else
       throw(AipsError("missing restfreq"));
 
-    uvprobvr_c(uv_handle_p,"sdf",vtype,&vlen,&vupd);
-    if (vupd)
+    if (uv_hasvar ("sdf"))
       uvgetvr_c(uv_handle_p,H_DBLE,"sdf",(char *)win.sdf, nspect);
     else if (nspect>1)
       throw(AipsError("missing sdf"));
 
-    uvprobvr_c(uv_handle_p,"sfreq",vtype,&vlen,&vupd);
-    if (vupd)
+    if (uv_hasvar ("sfreq"))
       uvgetvr_c(uv_handle_p,H_DBLE,"sfreq",(char *)win.sfreq, nspect);
     else
       throw(AipsError("missing sfreq"));
   }
 
   if (nwide > 0 && nwide <= MAXWIDE) {
-    uvprobvr_c(uv_handle_p,"wfreq",vtype,&vlen,&vupd);
-    if (vupd)
+    if (uv_hasvar ("wfreq"))
       uvgetvr_c(uv_handle_p,H_REAL,"wfreq",(char *)win.wfreq, nwide);
-    uvprobvr_c(uv_handle_p,"wwidth",vtype,&vlen,&vupd);
-    if (vupd)
+    if (uv_hasvar ("wwidth"))
       uvgetvr_c(uv_handle_p,H_REAL,"wwidth",(char *)win.wwidth, nwide);
   }
 
