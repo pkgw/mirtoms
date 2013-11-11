@@ -197,7 +197,6 @@ CarmaFiller::CarmaFiller (String& infile, Int debug, Bool Qtsys, Bool Qarrays, I
   Tracking(-1);
 }
 
-// ==============================================================================================
 CarmaFiller::~CarmaFiller()
 {
   if (Debug(1)) cout << "CarmaFiller::~CarmaFiller" << endl;
@@ -214,19 +213,17 @@ CarmaFiller::~CarmaFiller()
   if (Debug(1)) cout << "*** Closing " << infile_p << " ***\n" ;
 }
 
-// ==============================================================================================
+
 void CarmaFiller::Error(char *msg)
 {
   throw(AipsError(msg));
 }
 
-// ==============================================================================================
 void CarmaFiller::Warning(char *msg)
 {
   cout << "### Warning: " << msg <<  endl;
 }
 
-// ==============================================================================================
 Bool CarmaFiller::Debug(int level)
 {
   Bool ok=False;
@@ -234,7 +231,7 @@ Bool CarmaFiller::Debug(int level)
   return ok;
 }
 
-// ==============================================================================================
+
 void CarmaFiller::checkInput(Block<Int>& narrow, Block<Int>& window)
 {
   Bool ok=True;
@@ -338,14 +335,6 @@ void CarmaFiller::checkInput(Block<Int>& narrow, Block<Int>& window)
 
       // All CARMA (OVRO,BIMA,SZA) have this
       mount_p = 0;
-#if 0
-	if (array_p == "VLA")
-	  mount_p = 1;
-	uvrdvr_c(uv_handle_p,H_INT,"mount",(char *)&mount_p, (char *)&mount_p, 1);
-	cout << "Warning: " << array_p
-	     << " Cannot handle all of this telescope yet" << endl;
-	cout << "Assumed mount=" << mount_p << endl;
-#endif
 
       uvprobvr_c(uv_handle_p,"observer",vtype,&vlen,&vupd);
       if (vupd) {
@@ -467,7 +456,7 @@ void CarmaFiller::checkInput(Block<Int>& narrow, Block<Int>& window)
   }
 }
 
-// ==============================================================================================
+
 void CarmaFiller::setupMeasurementSet(const String& MSFileName, Bool useTSM)
 {
   if (Debug(1)) cout << "CarmaFiller::setupMeasurementSet" << endl;
@@ -484,25 +473,6 @@ void CarmaFiller::setupMeasurementSet(const String& MSFileName, Bool useTSM)
   td.removeColumn(MS::columnName(MS::FLAG));
   MS::addColumnToDesc(td, MS::FLAG,2);
 
-#if 0
-  // why does the FITS code do this? We don't need it....
-  td.removeColumn(MS::columnName(MS::SIGMA));
-  MS::addColumnToDesc(td, MS::SIGMA, IPosition(1,nCorr),
-		      ColumnDesc::Direct);
-#endif
-
-
-  // #define OLD_CODE     // define this if you want to try the old method again
-
-#ifdef OLD_CODE
-  // OLD
-  if (useTSM) {
-    td.defineHypercolumn("TiledData",3,
-			 stringToVector(MS::columnName(MS::DATA)+","+
-					MS::columnName(MS::FLAG)));
-  }
-#else
-  // NEW
   if (useTSM) {
     td.defineHypercolumn("TiledData",3,
 			 stringToVector(MS::columnName(MS::DATA)));
@@ -511,7 +481,6 @@ void CarmaFiller::setupMeasurementSet(const String& MSFileName, Bool useTSM)
     td.defineHypercolumn("TiledUVW",2,
 			 stringToVector(MS::columnName(MS::UVW)));
   }
-#endif
 
   if (Debug(1))  cout << "Creating MS=" << MSFileName  << endl;
   SetupNewTable newtab(MSFileName, td, Table::New);
@@ -523,33 +492,6 @@ void CarmaFiller::setupMeasurementSet(const String& MSFileName, Bool useTSM)
   StandardStMan aipsStMan;  // these are more efficient now
 
 
-#ifdef OLD_CODE
-  // ORIGINAL CODE
-  newtab.bindColumn(MS::columnName(MS::ANTENNA2), aipsStMan);
-  if (useTSM) {
-    // choose a tile size in the channel direction that is <=10
-    Int tileSize=(nChan+nChan/10)/(nChan/10+1);
-    // make the tile about 32k big
-    TiledColumnStMan tiledStMan1("TiledData",
-				 IPosition(3,nCorr,tileSize,
-					   2000/nCorr/tileSize));
-    TiledColumnStMan tiledStMan2("TiledWeight",
-				 IPosition(2,tileSize,
-					   8000/tileSize));
-    // Bind the DATA and FLAG columns to the tiled stman
-    newtab.bindColumn(MS::columnName(MS::DATA),tiledStMan1);
-    newtab.bindColumn(MS::columnName(MS::FLAG),tiledStMan1);
-  }
-  // Change some to aipsStMan as they change every row
-  newtab.bindColumn(MS::columnName(MS::ANTENNA2),aipsStMan);
-  newtab.bindColumn(MS::columnName(MS::UVW),aipsStMan);
-  if (!useTSM) {
-    newtab.bindColumn(MS::columnName(MS::DATA),aipsStMan);
-    newtab.bindColumn(MS::columnName(MS::FLAG),aipsStMan);
-  }
-  MeasurementSet ms(newtab);
-#else
-  //  NEW CODE TO ACCOMODATE VARYING SHAPED COLUMNS
   if (useTSM) {
     Int tileSize=nChan/10+1;
 
@@ -576,7 +518,6 @@ void CarmaFiller::setupMeasurementSet(const String& MSFileName, Bool useTSM)
   }
   TableLock lock(TableLock::PermanentLocking);
   MeasurementSet ms(newtab,lock);
-#endif
 
   // create all subtables
   // we make new tables with 0 rows
@@ -634,7 +575,7 @@ void CarmaFiller::setupMeasurementSet(const String& MSFileName, Bool useTSM)
   msc_p = new MSColumns(ms_p);
 } // setupMeasurementSet()
 
-// ==============================================================================================
+
 #define HISTLINE 8192
 void CarmaFiller::fillObsTables()
 {
@@ -676,13 +617,9 @@ void CarmaFiller::fillObsTables()
     msHisCol.message().put(row,hline);
   }
   hisclose_c(uv_handle_p);
-} // fillObsTables()
+}
 
-// ==============================================================================================
-//
-// Loop over the visibility data and fill the main table of the MeasurementSet
-// as you find corr/wcorr's
-//
+
 void CarmaFiller::fillMSMainTable(Bool scan, Int snumbase)
 {
   if (Debug(1)) cout << "CarmaFiller::fillMSMainTable" << endl;
@@ -762,13 +699,6 @@ void CarmaFiller::fillMSMainTable(Bool scan, Int snumbase)
 	if (Debug(3)) {                 // timeline monitoring...
 	    static Double time0 = -1.0;
 	    static Double dt0 = -1.0;
-#if 0
-	    // enforce timesteps increasing to test sorting effect
-	    if (time0 > 0)
-		time = time0 + inttime_p;
-	    else
-		cout << "Warning: faking timesorted data" << endl;
-#endif
 
 	    MVTime mjd_date(time/C::day);
 	    mjd_date.setFormat(MVTime::FITS);
@@ -791,8 +721,6 @@ void CarmaFiller::fillMSMainTable(Bool scan, Int snumbase)
 	} // Debug(3) for timeline monitoring
 
 	interval = inttime_p;
-	//msc.interval().put(0,interval);
-	//msc.exposure().put(0,interval);
 
 	// for MIRIAD, this would always cause a single array dataset,
 	// but we need to count the antpos occurences to find out
@@ -900,7 +828,7 @@ void CarmaFiller::fillMSMainTable(Bool scan, Int snumbase)
 	    }
 	    msc.exposure().put(row,interval);
 	    msc.interval().put(row,interval);
-#if 1
+
 	    // the dumb way: e.g. 3" -> 20" for 3c273
 	    Matrix<Complex> tvis(nCorr,win.nschan[ifno]);
 	    Cube<Bool> tflagCat(nCorr,win.nschan[ifno],nCat,False);
@@ -914,18 +842,7 @@ void CarmaFiller::fillMSMainTable(Bool scan, Int snumbase)
 		    tflag(j,i) = flag(j,i+woffset);
 		}
 	    }
-#else
-	    // the 'smart' way,  using IPositions (still 20"....)
-	    IPosition blc(2,0,0);
-	    IPosition trc(2,nCorr-1,win.nschan[ifno]-1);
-	    IPosition offset(2,0,win.ischan[ifno]-1);
-	    Matrix<Complex> tvis(nCorr,win.nschan[ifno]);
-	    Cube<Bool> tflagCat(nCorr,win.nschan[ifno],nCat,False);
-	    Matrix<Bool> tflag = tflagCat.xyPlane(0); // references flagCat's storage
 
-	    tvis(blc,trc) = vis(blc+offset,trc+offset);
-	    tflag(blc,trc) = flag(blc+offset,trc+offset);
-#endif
 	    msc.data().put(row,tvis);
 	    msc.flag().put(row,tflag);
 	    msc.flagCategory().put(row,tflagCat);
@@ -957,13 +874,11 @@ void CarmaFiller::fillMSMainTable(Bool scan, Int snumbase)
 	    msc.dataDescId().put(row,ifno);
 	    msc.fieldId().put(row,ifield);
 
-#if 1
 	    // TODO: SCAN_NUMBER needs to be added, they are all 0 now
 	    if (ifield_old != ifield)
 		iscan++;
 	    ifield_old = ifield;
 	    msc.scanNumber().put(row,iscan);
-#endif
 	}  // ifNo
 
 	fcount[ifield]++;
@@ -982,46 +897,13 @@ void CarmaFiller::fillMSMainTable(Bool scan, Int snumbase)
   if (Debug(1))
     cout << "nAnt_p contains: " << nAnt_p.nelements() << endl;
 
-#if 0
-  // fill the receptorAngle with defaults, just in case there is no AN table
-  for (Int arr=0; arr<nAnt_p.nelements(); arr++) {
-    Vector<Double> angle(2*nAnt_p[arr]);
-    angle=0;
-    receptorAngle_p[arr]=angle;
-  }
-#endif
-} // fillMSMainTable()
+}
+
 
 void CarmaFiller::fillAntennaTable()
 {
   if (Debug(1)) cout << "CarmaFiller::fillAntennaTable" << endl;
   Int nAnt=nants_p;
-
-#if 0
-  Int array = nArray_p;
-  // we don't have 'array' yet, and nAnt_p isnt' big enough....
-  if (nAnt_p[array]>MAXANT)
-    throw(AipsError("Too many antennas -- should never occur"));
-  if (nAnt_p[array]>nants_p)
-    throw(AipsError("Not all antennas found in antenna table:"));
-
-
-  receptorAngle_p[array].resize(2*nAnt);
-#endif
-
-  // === Here's a recipe to get them in ITRF format in casapy ===
-  //     But there appears to be some GEODETIC vs. GEOCENTRIC issue
-  // WGS84
-  // b=me.measure(me.observatory('carma'),'itrf')
-  // lon=me.getvalue(b)['m0']['value']
-  // lat=me.getvalue(b)['m1']['value']
-  // r=me.getvalue(b)['m2']['value']
-  // x=r*cos(lat)*cos(lon)
-  // y=r*cos(lat)*sin(lon)
-  // z=r*sin(lat)
-  // print 'arrayXYZ_p(0) =',x,';'
-  // print 'arrayXYZ_p(1) =',y,';'
-  // print 'arrayXYZ_p(2) =',z,';'
 
   arrayXYZ_p.resize(3);
   if (array_p == "HATCREEK" || array_p == "BIMA") {     // Array center:
@@ -1096,13 +978,6 @@ void CarmaFiller::fillAntennaTable()
     ms_p.antenna().addRow();
     row++;
 
-    /*if (i<6)
-      ant.dishDiameter().put(row,10.4);  // OVRO
-    else if (i<15)
-      ant.dishDiameter().put(row,6.1);   // BIMA or HATCREEK
-    else
-      ant.dishDiameter().put(row,3.5);   // SZA
-    */
     ant.dishDiameter().put(row, diameter);
 
     antXYZ(0) = antpos[i];              //# these are now in nano-sec
@@ -1125,8 +1000,6 @@ void CarmaFiller::fillAntennaTable()
     ant.flagRow().put(row,False);
     ant.name().put(row,String::toString(i+1));
     ant.station().put(row,"ANT" + String::toString(i+1));
-    // ant.name().put(row,"ANT" + String::toString(i+1));
-    // ant.station().put(row,"UNKNOWN");	// station names unknown at HatCreek (miriad really)
     ant.type().put(row,"GROUND-BASED");
 
     Vector<Double> offsets(3);
@@ -1136,12 +1009,7 @@ void CarmaFiller::fillAntennaTable()
     antXYZ = product(posRot,antXYZ);
     ant.position().put(row, antXYZ + arrayXYZ_p);
     ant.offset().put(row,offsets);
-
-    // store the angle for use in the feed table
-//    receptorAngle_p[array](2*i+0)=polangleA(i)*C::degree;
-//    receptorAngle_p[array](2*i+1)=polangleB(i)*C::degree;
   }
-  // ant.position().rwKeywordSet().define("MEASURE_REFERENCE","ITRF");
 
   nArray_p++;
   nAnt_p.resize(nArray_p);
@@ -1154,28 +1022,11 @@ void CarmaFiller::fillAntennaTable()
   // now do some things which only need to happen the first time around
 
   // store these items in non-standard keywords for now
-  //
-  //String arrnam = "CARMA";   // for now only "support" CARMA data
   ant.name().rwKeywordSet().define("ARRAY_NAME",array_p);
   ant.position().rwKeywordSet().define("ARRAY_POSITION",arrayXYZ_p);
+}
 
 
-  // fill the array table entry
-  // this assumes there is one AN table for each (sub)array index encountered.
-
-  //PJT ms_p.array().addRow();
-  // array is now gone, there is an array_id in the main MS table for
-  // id purposes.  We store the ARRAY_POSITION as a non-standard keyword
-  // with the POSITION collumn in the ANTENNA table (see above)
-#if 0
-  MSArrayColumns arr(ms_p.array());
-  arr.name().put(array,array_p);
-  arr.position().put(array,arrayXYZ);
-  arr.position().rwKeywordSet().define("MEASURE_REFERENCE","ITRF");
-#endif
-} // fillAntennaTable
-
-// ==============================================================================================
 void CarmaFiller::fillSyscalTable()
 {
   if (Debug(1)) cout << "CarmaFiller::fillSyscalTable" << endl;
@@ -1202,15 +1053,9 @@ void CarmaFiller::fillSyscalTable()
     Systemp(0) = systemp[i];
     msSys.tsys().put(row,Systemp);
   }
-
-
-
-  // this may actually be a nasty problem for MIRIAD datasets that are not
-  // timesorted. A temporary table needs to be written with all records,
-  // which then needs to be sorted and 'recomputed'
 }
 
-// ==============================================================================================
+
 void CarmaFiller::fillSpectralWindowTable(Bool use_lsrk)
 {
   if (Debug(1)) cout << "CarmaFiller::fillSpectralWindowTable" << endl;
@@ -1261,11 +1106,7 @@ void CarmaFiller::fillSpectralWindowTable(Bool use_lsrk)
   // one also needed to restart casapy!!! go figure.
   // now only write out spectral windows, not the wides.
   cout << "Array Conformance error check" << endl;
-#if 0
-  for (i=0; i < win.nspect + win.nwide; i++)
-#else
   for (i=0; i < win.nspect; i++)
-#endif
     {
 
     Int n = win.nschan[i];
@@ -1333,23 +1174,13 @@ void CarmaFiller::fillSpectralWindowTable(Bool use_lsrk)
       break;
     }
   }
-
-  // set the reference frames for frequency
-  //msSpW.chanFreq().rwKeywordSet().define("MEASURE_REFERENCE","TOPO");
-
-  //PJT msSpW.restFrequency().rwKeywordSet().define("MEASURE_REFERENCE","REST");
-  //msSpW.refFrequency().rwKeywordSet().define("MEASURE_REFERENCE","TOPO");
 }
 
-// ==============================================================================================
+
 void CarmaFiller::fillFieldTable()
 {
   if (Debug(1)) cout << "CarmaFiller::fillFieldTable" << endl;
 
-  // set the DIRECTION MEASURE REFERENCE for appropriate columns
-  // but note we're not varying them accross rows
-  /// MDirection::Types epochRef=MDirection::J2000;
-  /// if (nearAbs(epoch_p,1950.0,0.01)) epochRef=MDirection::B1950;
   msc_p->setDirectionRef(epochRef_p);
 
   MSFieldColumns& msField(msc_p->field());
@@ -1381,11 +1212,7 @@ void CarmaFiller::fillFieldTable()
     } else {
       // a special test where the central source gets _C appended to the source name
       msField.sourceId().put(fld,-sid-1);
-#if 0
-      msField.name().put(fld,source_p[field[fld]]+"_C");   // central source: append _C
-#else
       msField.name().put(fld,source_p[field[fld]]);        // or keep them all same name
-#endif
     }
 
     msField.code().put(fld,purpose_p[field[fld]]);
@@ -1414,7 +1241,7 @@ void CarmaFiller::fillFieldTable()
   }
 }
 
-// ==============================================================================================
+
 void CarmaFiller::fillSourceTable()
 {
   if (Debug(1)) cout << "CarmaFiller::fillSourceTable" << endl;
@@ -1426,12 +1253,6 @@ void CarmaFiller::fillSourceTable()
 
   Vector<Double> radec(2);
 
-  //String key("MEASURE_REFERENCE");
-  //msSource.restFrequency().rwKeywordSet().define(key,"REST");
-
-  // cout << "CarmaFiller::fillSourceTable() adding " << source_p.nelements() << " sources" << endl;
-
-  //
   for (uInt src=0; src < source_p.nelements(); src++) {
 
     skip = 0;                             // check not to duplicate source names
@@ -1451,9 +1272,7 @@ void CarmaFiller::fillSourceTable()
 
     msSource.sourceId().put(src,src);
     msSource.name().put(src,source_p[src]);
-    //    msSource.spectralWindowId().put(src,-1);     // really valid for all ??
     msSource.spectralWindowId().put(src,0);     // FIX it due to a bug in MS2 code (6feb2001)
-    // msSource.spectralWindowId().put(src,-1); // valid for all?
     msSource.direction().put(src,radec);
     if (n > 0) {
       Int m=n;
@@ -1466,15 +1285,10 @@ void CarmaFiller::fillSourceTable()
     }
     msSource.time().put(src,0.0);               // valid for all times
     msSource.interval().put(src,0);             // valid forever
-
-    // TODO?
-    // missing position/sysvel/transition in the produced MS/SOURCE sub-table ??
-
   }
 }
 
 
-// ==============================================================================================
 void CarmaFiller::fillFeedTable()
 {
   if (Debug(1)) cout << "CarmaFiller::fillFeedTable" << endl;
@@ -1532,7 +1346,7 @@ void CarmaFiller::fillFeedTable()
   }
 }
 
-// ==============================================================================================
+
 void CarmaFiller::fixEpochReferences() {
 
   if (Debug(1)) cout << "CarmaFiller::fixEpochReferences" << endl;
@@ -1552,10 +1366,7 @@ void CarmaFiller::fixEpochReferences() {
   }
 }
 
-//
-// track some important uv variables to get notified when they change
-//
-// ==============================================================================================
+
 void CarmaFiller::Tracking(int record)
 {
   if (Debug(3)) cout << "CarmaFiller::Tracking" << endl;
@@ -1745,7 +1556,7 @@ void CarmaFiller::Tracking(int record)
         << dra_p *206264.8062 << " "
         << ddec_p*206264.8062 << endl;
   }
-} // Tracking()
+}
 
 //
 //  this is also a nasty routine. It makes assumptions on
@@ -1756,7 +1567,6 @@ void CarmaFiller::Tracking(int record)
 //  (there has been some talk at the site to write subsets of
 //   the full data, which could break this routine)
 
-// ==============================================================================================
 void CarmaFiller::init_window(Block<Int>& narrow, Block<Int>& window)
 {
   if (Debug(1)) cout << "CarmaFiller::init_window" << endl;
@@ -1832,21 +1642,6 @@ void CarmaFiller::init_window(Block<Int>& narrow, Block<Int>& window)
       uvgetvr_c(uv_handle_p,H_REAL,"wwidth",(char *)win.wwidth, nwide);
   }
 
-  if (nspect != nwide) {
-    // don't know how to handle this
-    // we could assume the smaller one is the one we should deal with
-    // but there's no way to check how select=win() was used...
-    // also, if you've used uvcat options=nowide, nwide=0 and nspect non-zero.
-    // we really don't care about the wide bands anymore
-      /*
-    if (nwide < nspect)
-      throw(AipsError("nspect != nwide"));
-    else {
-      nwide = nspect;
-    }
-      */
-  }
-
   for (i=0; i<nspect; i++) {
     win.code[i] = 'N';
     win.keep[i] = 1;
@@ -1889,7 +1684,7 @@ void CarmaFiller::init_window(Block<Int>& narrow, Block<Int>& window)
 	  cout << "### Warning: bad window band window id " << k+1 << endl;
       }
     }
-  } // i
+  }
 
   if (Debug(1)) {
     cout << "Layout of spectral windows (init_window): nspect=" << nspect
@@ -1914,14 +1709,14 @@ void CarmaFiller::init_window(Block<Int>& narrow, Block<Int>& window)
   }
 }
 
-// ==============================================================================================
+
 void CarmaFiller::update_window()
 {
   if (Debug(1)) cout << "CarmaFiller::update_window" << endl;
   throw(AipsError("Cannot update window configuration yet"));
 }
 
-// ==============================================================================================
+
 void CarmaFiller::show()
 {
 #if 0
@@ -1930,15 +1725,13 @@ void CarmaFiller::show()
 #endif
 }
 
-// ==============================================================================================
+
 void CarmaFiller::close()
 {
   // does nothing for now
 }
 
 
-
-// ==============================================================================================
 int main(int argc, char **argv)
 {
   try {
