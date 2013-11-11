@@ -157,38 +157,29 @@ private:
 
 CarmaFiller::CarmaFiller (String& infile, Int debug, Bool Qtsys, Bool Qarrays, Int polmode)
 {
-  infile_p = infile;
-  debug_p = debug;
-  nArray_p = 0;
-  nfield = 0;           //  # mosaiced fields (using offsets?)
-  npoint = 0;           //  # pointings (using independant RA/DEC?)
-  Qtsys_p = Qtsys;
-  Qarrays_p = Qarrays;
-  polmode_p = polmode;
-  zero_tsys = 0;
-  for (int i=0; i<MAXFIELD; i++) fcount[i] = 0;
-  for (int i=0; i<MAXANT;   i++) phasem1[i] = 0.0;
+    infile_p = infile;
+    debug_p = debug;
+    nArray_p = 0;
+    nfield = 0;
+    npoint = 0;
+    Qtsys_p = Qtsys;
+    Qarrays_p = Qarrays;
+    polmode_p = polmode;
+    zero_tsys = 0;
 
-  if (Debug(1)) cout << "CarmaFiller::CarmaFiller debug_level=" << debug << endl;
-  if (Debug(1)) cout << "Opening miriad dataset " << infile_p << endl;
-  if (Debug(1)) cout << "See also "
-		     << "http://www.astro.umd.edu/~teuben/casa/carmafiller.html" << endl;
-  if (Debug(1)) cout << (Qtsys_p ?  "tsys weights" : "weights=1") << endl;
-  if (Debug(1)) cout << (Qarrays_p ? "split arrays" : "single array forced") << endl;
+    for (int i = 0; i < MAXFIELD; i++)
+	fcount[i] = 0;
+    for (int i = 0; i < MAXANT; i++)
+	phasem1[i] = 0.0;
 
-  if (sizeof(double) != sizeof(Double))
-    cout << "Double != double; carmafiller will probably fail" << endl;
-  if (sizeof(int) != sizeof(Int))
-    cout << "int != Int; carmafiller will probably fail" << endl;
+    if (sizeof (double) != sizeof (Double))
+	cout << "Double != double; carmafiller will probably fail" << endl;
+    if (sizeof (int) != sizeof (Int))
+	cout << "int != Int; carmafiller will probably fail" << endl;
 
-  // open miriad dataset
-  uvopen_c(&uv_handle_p, infile_p.chars(), "old");
-
-  // preamble data must be UVW (default miriad is UV)
-  uvset_c(uv_handle_p,"preamble","uvw/time/baseline",0,0.0,0.0,0.0);
-
-  // initialize those UV variables that need to be tracked
-  Tracking(-1);
+    uvopen_c (&uv_handle_p, infile_p.chars (), "old");
+    uvset_c (uv_handle_p, "preamble", "uvw/time/baseline", 0, 0.0, 0.0, 0.0);
+    Tracking (-1);
 }
 
 
