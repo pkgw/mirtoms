@@ -1483,7 +1483,7 @@ main (int argc, char **argv)
 {
     try {
 	Input inp (1);
-	inp.version ("4 - PKGW hacked MIRIAD->MS converter");
+	inp.version ("");
 	inp.create ("vis",     "",        "Name of CARMA dataset name",         "string");
 	inp.create ("ms",      "",        "Name of MeasurementSet",             "string");
 	inp.create ("tsys",    "False",   "Fill WEIGHT from Tsys in data?",     "bool");
@@ -1493,9 +1493,9 @@ main (int argc, char **argv)
 
 	String vis (inp.getString ("vis"));
 	if (vis == "")
-	    throw AipsError ("No input path (vis=) given");
+	    throw AipsError ("no input path (vis=) given");
 	if (! File (vis).isDirectory ())
-	    throw AipsError ("Input path does not refer to a directory");
+	    throw AipsError ("input path (vis=) does not refer to a directory");
 
 	String ms (inp.getString ("ms"));
 	if (ms == "")
@@ -1523,7 +1523,7 @@ main (int argc, char **argv)
 	cf.fillFeedTable ();
 	cf.fixEpochReferences ();
     } catch (AipsError x) {
-	cerr << x.getMesg() << endl;
+	cerr << "error: " << x.getMesg () << endl;
 	return 1;
     }
 
