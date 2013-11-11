@@ -100,7 +100,6 @@ public:
 
     void Tracking (int record);
     void init_window (Block<Int>& narrow, Block<Int>& window);
-    void Error (char *msg);
     void Warning (char *msg);
 
 private:
@@ -193,11 +192,6 @@ CarmaFiller::CarmaFiller (String& infile, Int debug, Bool Qtsys, Bool Qarrays, I
   Tracking(-1);
 }
 
-
-void CarmaFiller::Error(char *msg)
-{
-  throw(AipsError(msg));
-}
 
 void CarmaFiller::Warning(char *msg)
 {
