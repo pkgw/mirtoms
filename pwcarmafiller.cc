@@ -81,7 +81,6 @@ class CarmaFiller {
 public:
     CarmaFiller (String& infile, Int debug=0,
 		 Bool Qtsys=False, Bool Qarrays=False, Int polmode=0);
-    ~CarmaFiller();
 
     void checkInput (Block<Int>& narrow, Block<Int>& window);
     Bool Debug (int level);
@@ -192,22 +191,6 @@ CarmaFiller::CarmaFiller (String& infile, Int debug, Bool Qtsys, Bool Qarrays, I
 
   // initialize those UV variables that need to be tracked
   Tracking(-1);
-}
-
-CarmaFiller::~CarmaFiller()
-{
-  if (Debug(1)) cout << "CarmaFiller::~CarmaFiller" << endl;
-  if (zero_tsys)
-    cout << "There were " << zero_tsys << " record with no WEIGHT due to zero TSYS" << endl;
-
-  if (Debug(1))
-    for (int i=0; i<nfield; i++)
-      cout << "Field " << i << " = " << fcount[i] << " records" << endl;
-
-  // most single MIRIAD files are time ordered, so could check for
-  // that, and if so, add SORT_ORDER = 'ASCENDING' and COLUMNS = 'TIME'
-
-  if (Debug(1)) cout << "*** Closing " << infile_p << " ***\n" ;
 }
 
 
