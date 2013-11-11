@@ -82,7 +82,7 @@ public:
     CarmaFiller (String& infile, Int debug=0,
 		 Bool Qtsys=False, Bool Qarrays=False, Int polmode=0);
 
-    void checkInput (Block<Int>& narrow, Block<Int>& window);
+    void checkInput (Block<Int>& window);
     Bool Debug (int level);
 
     void setupMeasurementSet (const String& MSFileName);
@@ -99,7 +99,7 @@ public:
     void fixEpochReferences ();
 
     void Tracking (int record);
-    void init_window (Block<Int>& narrow, Block<Int>& window);
+    void init_window (Block<Int>& window);
 
 private:
     String infile_p;
@@ -188,7 +188,7 @@ Bool CarmaFiller::Debug(int level)
 }
 
 
-void CarmaFiller::checkInput(Block<Int>& narrow, Block<Int>& window)
+void CarmaFiller::checkInput(Block<Int>& window)
 {
   Bool ok=True;
   Int i, nread, nwread, vlen, vupd;
@@ -212,7 +212,7 @@ void CarmaFiller::checkInput(Block<Int>& narrow, Block<Int>& window)
 
     if (nvis == 1) {
       // get the initial correllator setup
-      init_window(narrow,window);
+      init_window(window);
 
       //  should store nread + nwread, or handle it as option
       if (win.nspect > 0) {               // narrow band, with possibly wide band also
@@ -1514,7 +1514,7 @@ void CarmaFiller::Tracking(int record)
 //  (there has been some talk at the site to write subsets of
 //   the full data, which could break this routine)
 
-void CarmaFiller::init_window(Block<Int>& narrow, Block<Int>& window)
+void CarmaFiller::init_window(Block<Int>& window)
 {
   if (Debug(1)) cout << "CarmaFiller::init_window" << endl;
 
@@ -1593,17 +1593,6 @@ void CarmaFiller::init_window(Block<Int>& narrow, Block<Int>& window)
     win.code[i] = 'N';
     win.keep[i] = 1;
   }
-  if (nspect > 0 && narrow[0] > 0) {         // fix up the keep[] array from the narrow= keyword
-    for (j=0; j<nspect; j++)                 // flag all so we don't keep them
-      win.keep[j] = 0;
-    for (j=0; j<narrow.nelements(); j++) {   // keep the ones listed in the narrow= keyword
-      k = narrow[j]-1;
-      if (k >= 0 || k < nspect)
-	win.keep[k] = 1;
-      else
-	cout << "### Warning: bad narrow spectral window id " << k+1 << endl;
-    }
-  }
 
   idx = (nspect > 0 ? nspect : 0);           // idx points into the combined win.xxx[] elements
   for (i=0; i<nwide; i++) {
@@ -1645,10 +1634,6 @@ void CarmaFiller::init_window(Block<Int>& narrow, Block<Int>& window)
 	   << win.sfreq[i] <<  " " << win.sdf[i] <<  " " << win.restfreq[i]
 	   << "\n";
 
-    cout << "narrow: " ;
-    for (i=0; i<narrow.nelements(); i++)
-	cout << narrow[i] << " ";
-    cout << endl;
     cout << "win: " ;
     for (i=0; i<window.nelements(); i++)
 	cout << window[i] << " ";
@@ -1665,7 +1650,6 @@ main(int argc, char **argv)
 	inp.version ("4 - PKGW hacked MIRIAD->MS converter");
 	inp.create ("vis",     "",        "Name of CARMA dataset name",         "string");
 	inp.create ("ms",      "",        "Name of MeasurementSet",             "string");
-	inp.create ("narrow",  "all",     "Which of the narrow band windows",   "string");
 	inp.create ("win",     "all",     "Which of the window averages",       "string");
 	inp.create ("tsys",    "False",   "Fill WEIGHT from Tsys in data?",     "bool");
 	inp.create ("arrays",  "False",   "DEBUG: Split multiple arrays?",      "bool");
@@ -1691,7 +1675,7 @@ main(int argc, char **argv)
 	Int  snumbase = inp.getInt ("snumbase");
 
 	Int i, debug = -1;
-	Block<Int> narrow, win;
+	Block<Int> win;
 
 	for (i = 0; i < 99; i++) { // I don't understand what's going on here.
 	    if (!inp.debug (i)) {
@@ -1699,12 +1683,6 @@ main(int argc, char **argv)
 		break;
 	    }
 	}
-
-	if (inp.getString ("narrow") == "all") {
-	    narrow.resize (1);
-	    narrow[0] = -1;
-	} else
-	    narrow = inp.getIntArray ("narrow");
 
 	if (inp.getString ("win") == "all") {
 	    win.resize (1);
@@ -1714,7 +1692,7 @@ main(int argc, char **argv)
 
 	CarmaFiller cf (vis, debug, Qtsys, Qarrays, polmode);
 
-	cf.checkInput (narrow, win);
+	cf.checkInput (win);
 	cf.setupMeasurementSet (ms);
 	cf.fillObsTables ();
 	cf.fillAntennaTable ();
