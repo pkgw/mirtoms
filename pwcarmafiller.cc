@@ -1,23 +1,27 @@
-//# carmafiller:  (carma) miriad dataset to MeasurementSet conversion
-//# Copyright (C) 1997,2000,2001,2002
-//# Associated Universities, Inc. Washington DC, USA.
-//#
-//# This program is free software; you can redistribute it and/or modify
-//# it under the terms of the GNU General Public License as published by
-//# the Free Software Foundation; either version 2 of the License, or
-//# (at your option) any later version.
-//#
-//# This program is distributed in the hope that it will be useful,
-//# but WITHOUT ANY WARRANTY; without even the implied warranty of
-//# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-//# GNU General Public License for more details.
-//#
-//# You should have received a copy of the GNU General Public License
-//# along with this program; if not, write to the Free Software
-//# Foundation, Inc., 675 Masve, Cambridge, MA 02139, USA.
-//#
-//# $Id: carmafiller.cc,v 1.30 2010/06/23 18:14:08 pteuben Exp $
+// pwcarmafiller:  (carma) miriad dataset to MeasurementSet conversion
+// Modified by Peter Williams for ATA data
+// Copyright 2010-2013
 //
+// Base code:
+// Copyright (C) 1997,2000,2001,2002
+// Associated Universities, Inc. Washington DC, USA.
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation; either version 2 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program; if not, write to the Free Software
+// Foundation, Inc., 675 Masve, Cambridge, MA 02139, USA.
+//
+// $Id: carmafiller.cc,v 1.30 2010/06/23 18:14:08 pteuben Exp $
+
 
 #include <casa/aips.h>
 #include <casa/stdio.h>
@@ -43,110 +47,31 @@
 #include <tables/Tables.h>
 #include <tables/Tables/TableInfo.h>
 
+#include <ms/MeasurementSets.h>
 
-#include <ms/MeasurementSets.h>              // Measurementset and MSColumns
-
-// Miriad interface
 #include <miriad-c/maxdimc.h>
 #include <miriad-c/miriad.h>
 
 #include <casa/namespace.h>
 
-// MIRIAD dataset MeasurementSet filler. Derived from bimafiller.
-// This version is CARMA specific, but in the end there is no
-// reason why this should be CARMA specific.
-//
-// For MS2 based files, see also mirfiller.g, developed by Ray
-// Plante to test the new SpectralWindow layout.
-//
-// See also:
-//	http://www.astro.umd.edu/~teuben/casa/carmafiller.html
-// for more up to date documentation, as well as a reference to Ray's
-// work on mirfiller.
-// Despite that this program is written in C++ and uses classes, it is
-// really a set of routines manipulating a huge common block.....
-//
-// Acknowledgement: this program was originally cloned off uvfitsfiller.cc
-//                  whose code is now in MSFitsInput.cc
-//
-//
-// Limitations, Caveats and Remaining ToDo's
-//    - only really deals with 1 polarization
-//    - does not apply the various (miriad) complex gain corrections
-//      (uvcat and friends should be used for that in miriad, it would be
-//      silly to duplicate that code here)
-//    - copies both the wide, window and narrow band data (or whichever is present)
-//      but can subselect via wide=,win=,narrow=
-//    - this code won't run if Double!=double or Float!=float or Int!=int
-//      On some future 64bit machines this may cause problems?
-//    - CARMA type arrays when dishes are not the same size
-//    - do not mix arrays from different telescopes (e.g. BIMA and ATCA)
-//      but it should handle different configurations (ARRAYs) of the same
-//      instrument
-//    - handle multiple array configuration datasets that were UVCAT'ed
-//      (needs to count antennae up at each array configuration)
-//    - true miriad storage manager ?
-//    - read and test ATNF data (primarely a MIRIAD-UVFITS conformance test?)
-//    - check UV override, is that being handled transparently?
-//
-//    - spectral windows layout  (code present, fix table access descriptors)
-//      CHECK: what happens if e.g. uvcat does some line= preprocessing
-//    - correct restfreq's in source tables that relate to the spectral windows
-//      (this code currently coredumps)
-//    - make win=,narrow=,wide=0 cause non of them to be written in that selection
-//    - add syscal table
-//    - add weather table
-//    - although no more wides are written, there is a way to make a small MS
-//      from the wides only by preprocessing in miriad, but conceivably
-//      could be done here as well??  -- except the narrow= keyword seems to write
-//      files that suffer from the Table array conformance error
 
-//  History:
-//   Spring 1997:   written (cloned off uvfitsfiller)       Peter Teuben
-//   July 1997:     Y2K, fixed table-interface		                PJT
-//   Dec 1997:      fixed wideband only data (e.g. uvgen)               PJT
-//   ???            somebody fixed up this code for some new release    ???
-//   May 2000:	    fixed up for various new AIPS++ conventions	        PJT
-//                  and added multi-source & field                      PJT
-//   Sep 2000:      development now on linux, converted to OldMS        PJT
-//   Dec 2000:	    Conversion to MS (MS2)				PJT
-//                  typical compile time: (P600/256M/15MBps HD: 36")
-//                  typical 3c273 conversion time:  2.6" (5.3->11.3 MB)
-//                  Cf. that to "uvio" processing time, which runs at disk I/O
-//                  speed (15 MB/s on the beforementioned laptop)
-//   Jan-Feb 2001:  window layout, restfreq's and various things to get
-//                  msmultiscale to work; added some syscal support     PJT
-//   April 2001:    final cleanup for the 1.5 AIPS++ release -          PJT
-//                  [note that from this moment on bimafiller is for
-//                   experimental use and deprecated, the new version
-//                   will be called 'mirfiller'
-//   Oct 2001:      mirlib changed location
-//   Sep 2009:      revived in CASA, added various tables for CARMA
-//                  also renamed from bimafiller to carmafiller
-//   Jan 2010:
+// Based off of carmafiller, which came from bimafiller, and before that,
+// uvfitsfiller.
 
+typedef struct window {
+    // CASA defines everything mid-band, mid-interval
+    int    nspect;                   // number of valid windows (<=MAXWIN, typically 16)
+    int    nschan[MAXWIN+MAXWIDE];   // number of channels in a window
+    int    ischan[MAXWIN+MAXWIDE];   // starting channel of a window (1-based)
+    double sdf[MAXWIN+MAXWIDE];      // channel separation
+    double sfreq[MAXWIN+MAXWIDE];    // frequency of first channel in window (doppler changes)
+    double restfreq[MAXWIN+MAXWIDE]; // rest freq, if appropriate
+    char   code[MAXWIN+MAXWIDE];     // code to CASA identification (N, W or S; S not used anymore)
+    int    keep[MAXWIN+MAXWIDE];     // keep this window for output to MS (0=false 1=true)
 
-// a placeholder for the MIRIAD spectral window configuration
-// see also the MIRIAD programmers guide, and its appendix on UV Variables
-// for CARMA we have MAXWIN = MAXWIDE (16 normally, 6 in 2006-2009, more later)
-// narrow band (plus MAXWIDE space to point into the wide band data too)
-
-typedef struct window {     // CASA defines everything mid-band mid-interval
-  int    nspect;                   // number of valid windows (<=MAXWIN, typically 16)
-  int    nschan[MAXWIN+MAXWIDE];   // number of channels in a window
-  int    ischan[MAXWIN+MAXWIDE];   // starting channel of a window (1-based)
-  double sdf[MAXWIN+MAXWIDE];      // channel separation
-  double sfreq[MAXWIN+MAXWIDE];    // frequency of first channel in window (doppler changes)
-  double restfreq[MAXWIN+MAXWIDE]; // rest freq, if appropriate
-  char   code[MAXWIN+MAXWIDE];     // code to CASA identification (N, W or S; S not used anymore)
-  int    keep[MAXWIN+MAXWIDE];     // keep this window for output to MS (0=false 1=true)
-
-  // wide band (for CARMA these are the spectral window averages - i.e. nspect=nwide)
-  int    nwide;                    // number of wide band channels
-  float  wfreq[MAXWIDE];           // freq
-  float  wwidth[MAXWIDE];          // width
-
-
+    int    nwide;                    // number of wide band channels
+    float  wfreq[MAXWIDE];           // freq
+    float  wwidth[MAXWIDE];          // width
 } WINDOW;
 
 //  the maximum number of fields in mosaicing observations, careful, miriad
