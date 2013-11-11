@@ -920,10 +920,6 @@ void CarmaFiller::fillSpectralWindowTable()
     msDop.velDefMeas().put(i,MDoppler(Quantity(0),MDoppler::RADIO));
   }
 
-  // THIS BUG caused that array conformance error, but fixing it
-  // one also needed to restart casapy!!! go figure.
-  // now only write out spectral windows, not the wides.
-  cout << "Array Conformance error check" << endl;
   for (i=0; i < win.nspect; i++)
     {
 
