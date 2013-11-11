@@ -80,7 +80,7 @@ typedef struct window {
 class CarmaFiller {
 public:
     CarmaFiller (String& infile, Int debug=0,
-		 Bool apply_tsys=False, Bool Qarrays=False, Int polmode=0);
+		 Bool apply_tsys=False, Int polmode=0);
 
     void checkInput ();
     Bool Debug (int level);
@@ -144,7 +144,6 @@ private:
 
     WINDOW win;
     Bool apply_tsys;    /* tsys weights */
-    Bool Qarrays_p;  /* write separate arrays */
 
     float data[2*MAXCHAN], wdata[2*MAXCHAN];	// 2*MAXCHAN since (Re,Im) pairs complex numbers
     int flags[MAXCHAN], wflags[MAXCHAN];
@@ -154,7 +153,7 @@ private:
 };
 
 
-CarmaFiller::CarmaFiller (String& infile, Int debug, Bool apply_tsys, Bool Qarrays, Int polmode)
+CarmaFiller::CarmaFiller (String& infile, Int debug, Bool apply_tsys, Int polmode)
 {
     infile_p = infile;
     debug_p = debug;
@@ -162,7 +161,6 @@ CarmaFiller::CarmaFiller (String& infile, Int debug, Bool apply_tsys, Bool Qarra
     nfield = 0;
     npoint = 0;
     this->apply_tsys = apply_tsys;
-    Qarrays_p = Qarrays;
     polmode_p = polmode;
     zero_tsys = 0;
 
@@ -1371,8 +1369,6 @@ void CarmaFiller::Tracking(int record)
 
   uvprobvr_c(uv_handle_p,"antpos",vtype,&vlen,&vupd);
   if (vupd && record) {
-    if (Qarrays_p)
-      nants_offset_p += nants_p;      // increment from size of previous array
     uvgetvr_c(uv_handle_p,H_INT, "nants", (char *)&nants_p,1);
     uvgetvr_c(uv_handle_p,H_DBLE,"antpos",(char *)antpos,3*nants_p);
     if (Debug(2)) {
@@ -1385,8 +1381,6 @@ void CarmaFiller::Tracking(int record)
       }
     }
     if (Debug(2)) cout << "Warning: antpos changed at record " << record << endl;
-    if (Qarrays_p)
-      fillAntennaTable();
   }
 
   if (win.nspect > 0) {
@@ -1634,7 +1628,6 @@ main(int argc, char **argv)
 	inp.create ("vis",     "",        "Name of CARMA dataset name",         "string");
 	inp.create ("ms",      "",        "Name of MeasurementSet",             "string");
 	inp.create ("tsys",    "False",   "Fill WEIGHT from Tsys in data?",     "bool");
-	inp.create ("arrays",  "False",   "DEBUG: Split multiple arrays?",      "bool");
 	inp.create ("lsrk",    "True",    "Use LSRK (instead of LSRD)?",        "bool");
 	inp.create ("polmode", "0",       "0 = single pol; 1 = Full XY",        "int");
 	inp.create ("snumbase","0",       "Starting SCAN_NUMBER value",         "int");
@@ -1651,7 +1644,6 @@ main(int argc, char **argv)
 	    ms = vis.before ('.') + ".ms";
 
 	Bool apply_tsys = inp.getBool ("tsys");
-	Bool Qarrays =  inp.getBool ("arrays"); // debug
 	Bool Qlsrk    = inp.getBool ("lsrk"); // LSRK or LSRD
 	Int  polmode  = inp.getInt ("polmode");
 	Int  snumbase = inp.getInt ("snumbase");
@@ -1665,7 +1657,7 @@ main(int argc, char **argv)
 	    }
 	}
 
-	CarmaFiller cf (vis, debug, apply_tsys, Qarrays, polmode);
+	CarmaFiller cf (vis, debug, apply_tsys, polmode);
 
 	cf.checkInput ();
 	cf.setupMeasurementSet (ms);
