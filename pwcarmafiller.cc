@@ -60,6 +60,11 @@
 
 // Based off of carmafiller, which came from bimafiller, and before that,
 // uvfitsfiller.
+//
+// The big problem with this program right now is that we really need to make
+// two passes through the dataset to build up lists of all of the pol'n
+// configs, pointings, etc., before we can actually start writing everything
+// out.
 
 typedef struct window {
     // CASA defines everything mid-band, mid-interval
@@ -103,8 +108,8 @@ private:
     MSColumns *msc_p;
     Int debug_level;
     Int nIF_p;
-    String array_p, project_p, object_p, telescope_p,
-	observer_p, version_p, timsys_p;
+    String telescope_name, project_p, object_p, telescope_p,
+	observer_name, timsys_p;
     Vector<Int> nPixel_p, corrType_p, corrIndex_p;
     Matrix<Int> corrProduct_p;
     Double epoch_p;
@@ -128,7 +133,7 @@ private:
     int pol_p;
 
     Vector<Int> polmapping;
-    Int nants_p, nants_offset_p, nchan_p, nwide_p, npol_p;
+    Int nants_p, nchan_p, nwide_p, npol_p;
     Double antpos[3*MAXANT];
     double longitude;
     Double ra_p, dec_p;       // current pointing center RA,DEC at EPOCH
@@ -175,177 +180,115 @@ CarmaFiller::CarmaFiller (String& infile, Int debug_level, Bool apply_tsys)
 #define DEBUG(level) (this->debug_level >= (level))
 
 
-void CarmaFiller::checkInput()
+void 
+CarmaFiller::checkInput ()
 {
-  Int i, nread, nwread, vlen, vupd;
-  char vtype[10], vdata[64];
-  Float epoch;
+    Int i, nread, nwread, vlen, vupd;
+    char vtype[10], vdata[64];
+    Float epoch;
 
-  if (DEBUG(1)) cout << "CarmaFiller::checkInput" << endl;
+    uvread_c (uv_handle_p, preamble, data, flags, MAXCHAN, &nread);
+    uvwread_c (uv_handle_p, wdata, wflags, MAXCHAN, &nwread);
+    if (nread <= 0 && nwread <= 0)
+	throw AipsError ("no UV data present");
+    init_window ();
 
-  // Let's read one scan and try and derive some basics. If important
-  // variables not present, bail out (or else scan on)
-
-  nvis = 0;
-  for (;;) {   // loop forever until happy or EOF
-    uvread_c(uv_handle_p, preamble, data, flags, MAXCHAN, &nread);
-    if (nread <= 0) break;
-    nvis++;
-    uvwread_c(uv_handle_p, wdata, wflags, MAXCHAN, &nwread);
-    if (nvis==0) {
-      cout << "1st scan: nread=" << nread << " nwread="<<nwread<<" narrow and wide" << endl;
-    }
-
-    if (nvis == 1) {
-      // get the initial correllator setup
-      init_window();
-
-      //  should store nread + nwread, or handle it as option
-      if (win.nspect > 0) {               // narrow band, with possibly wide band also
+    if (win.nspect > 0) {
 	nchan_p = nread;
 	nwide_p = nwread;
-      } else {                            // wide band data only: nread=nwread
+    } else {
 	nchan_p = nread;
 	nwide_p = 0;
-      }
-
-      // get the initial array configuration
-
-      nants_offset_p = 0;
-      uvgetvr_c(uv_handle_p,H_INT, "nants", (char *)&nants_p,1);
-      uvgetvr_c(uv_handle_p,H_DBLE,"antpos",(char *)antpos,3*nants_p);
-      uvgetvr_c(uv_handle_p,H_DBLE,"longitu",(char *)&longitude,1);
-      if (DEBUG(1)) {
-	cout << "Found " << nants_p << " antennas (first scan)" << endl;
-	for (int i=0; i<nants_p; i++) {
-	  cout << antpos[i] << " " <<
-	    antpos[i+nants_p] << " " <<
-	    antpos[i+nants_p*2] << endl;
-	}
-      }
-
-      // remember systemp is stored systemp[nants][nwin] in C notation
-      if (win.nspect > 0) {
-	uvgetvr_c(uv_handle_p,H_REAL,"systemp",(char *)systemp,nants_p*win.nspect);
-	if (DEBUG(1)) {
-	  cout << "Found systemps (first scan)" ;
-	  for (Int i=0; i<nants_p; i++)  cout << systemp[i] << " ";
-	  cout << endl;
-	}
-      } else {
-	uvgetvr_c(uv_handle_p,H_REAL,"wsystemp",(char *)systemp,nants_p);
-	if (DEBUG(1)) {
-	  cout << "Found wsystemps (first scan)" ;
-	  for (Int i=0; i<nants_p; i++)  cout << systemp[i] << " ";
-	  cout << endl;
-	}
-      }
-
-      if (win.nspect > 0) {
-	uvgetvr_c(uv_handle_p,H_DBLE,"restfreq",(char *)win.restfreq,win.nspect);
-	if (DEBUG(1)) {
-	  cout << "Found restfreq (first scan)" ;
-	  for (Int i=0; i<win.nspect; i++)  cout << win.restfreq[i] << " ";
-	  cout << endl;
-	}
-      }
-
-      // Note that MIRIAD coordinates are in nanosec, but actual unused
-      // antennas are filled with -999 values (or sometimes 0!)
-
-      uvprobvr_c(uv_handle_p,"project",vtype,&vlen,&vupd);
-      if (vupd) {
-	uvgetvr_c(uv_handle_p,H_BYTE,"project",vdata,32);
-	project_p = vdata;
-      } else
-	project_p = "unknown";
-      if (DEBUG(1)) cout << "Project=>" << project_p << "<=" << endl;
-
-      //uvgetvr_c(uv_handle_p,H_BYTE,"version",vdata,32);
-      version_p = "hack"; //vdata;
-      if (DEBUG(1)) cout << "Version=>" << version_p << "<=" << endl;
-
-      uvgetvr_c(uv_handle_p,H_BYTE,"source",vdata,10);
-      object_p = vdata;
-
-      // TODO: telescope will now change, so this is not a good idea
-      uvgetvr_c(uv_handle_p,H_BYTE,"telescop",vdata,10);
-      array_p = vdata;
-      // array_p = "CARMA"; take that
-      array_p = "ATA";
-      if (DEBUG(1)) cout << "First baseline=>" << array_p << "<=" << endl;
-
-      // All CARMA (OVRO,BIMA,SZA) have this
-      mount_p = 0;
-
-      uvprobvr_c(uv_handle_p,"observer",vtype,&vlen,&vupd);
-      if (vupd) {
-	uvgetvr_c(uv_handle_p,H_BYTE,"observer",vdata,10);
-	observer_p = vdata;
-      } else
-	observer_p = "unknown";
-
-      uvgetvr_c(uv_handle_p,H_REAL,"epoch",(char *)&epoch,1);
-      epoch_p = epoch;
-      // do this globally, we used to do this in the Field table alone
-      epochRef_p=MDirection::J2000;
-      if (nearAbs(epoch_p,1950.0,0.01)) epochRef_p=MDirection::B1950;
-
-      uvgetvr_c(uv_handle_p,H_INT,"npol", (char *)&npol_p,1);
-      uvgetvr_c(uv_handle_p,H_INT,"pol",(char *)&pol_p,1);
-      uvgetvr_c(uv_handle_p,H_REAL,"inttime",(char *)&inttime_p,1);
-      uvgetvr_c(uv_handle_p,H_DBLE,"freq",(char *)&freq_p,1);
-      freq_p *= 1e9;
-
-      // and initial source position
-
-      uvgetvr_c(uv_handle_p,H_DBLE,"ra", (char *)&ra_p, 1);
-      uvgetvr_c(uv_handle_p,H_DBLE,"dec",(char *)&dec_p,1);
-
-      // check if certain calibration tables are present and warn if so,
-      // since we can't (don't want to) deal with them here; miriad
-      // programs like uvcat should be used to apply them!
-
-      if (hexists_c(uv_handle_p,"gains"))
-        cout << "Warning: gains table present, but cannot apply them" << endl;
-      if (hexists_c(uv_handle_p,"bandpass"))
-        cout << "Warning: bandpass table present, but cannot apply them" << endl;
-      if (hexists_c(uv_handle_p,"leakage"))
-        cout << "Warning: leakage table present, but cannot apply them" << endl;
-
-      break; // we only do work on the first visibility! could get max npol by brute force
     }
-  }
 
-  if (nvis == 0)
-    throw AipsError ("no narrow or wide band data present");
+    // Get the initial array configuration
+    uvgetvr_c (uv_handle_p, H_INT, "nants", (char *) &nants_p, 1);
+    uvgetvr_c (uv_handle_p, H_DBLE, "antpos", (char *) antpos, 3 * nants_p);
+    uvgetvr_c (uv_handle_p, H_DBLE, "longitu", (char *) &longitude, 1);
 
-  uvrewind_c(uv_handle_p);
+    // Note: systemp is stored systemp[nants][nwin] in C notation
+    if (win.nspect > 0)
+	uvgetvr_c (uv_handle_p, H_REAL, "systemp", (char *) systemp, nants_p * win.nspect);
+    else
+	uvgetvr_c (uv_handle_p, H_REAL, "wsystemp", (char *) systemp, nants_p);
 
-  int numCorr;
+    if (win.nspect > 0)
+	uvgetvr_c (uv_handle_p, H_DBLE, "restfreq", (char *)win.restfreq, win.nspect);
 
-  // Full-Stokes XY pol
-  numCorr = npol_p = 4;
-  corrType_p.resize (4);
-  corrType_p(0) = Stokes::XX;
-  corrType_p(1) = Stokes::XY;
-  corrType_p(2) = Stokes::YX;
-  corrType_p(3) = Stokes::YY;
-  polmapping.resize (13);
-  polmapping = -1;
-  polmapping(-5 + 8) = 0;
-  polmapping(-6 + 8) = 3;
-  polmapping(-7 + 8) = 1;
-  polmapping(-8 + 8) = 2;
 
-  // Figure out the correlation products from the polarizations
-  corrProduct_p.resize(2,numCorr); corrProduct_p=0;
-  for (i=0; i<numCorr; i++) {
-    Fallible<Int> receptor=Stokes::receptor1(Stokes::type(corrType_p(i)));
-    if (receptor.isValid()) corrProduct_p(0,i)=receptor;
-    receptor=Stokes::receptor2(Stokes::type(corrType_p(i)));
-    if (receptor.isValid()) corrProduct_p(1,i)=receptor;
-  }
+    uvprobvr_c (uv_handle_p, "project", vtype, &vlen, &vupd);
+    if (vupd) {
+	uvgetvr_c (uv_handle_p, H_BYTE, "project", vdata, 32);
+	project_p = vdata;
+    } else
+	project_p = "unknown";
+
+    uvgetvr_c (uv_handle_p, H_BYTE, "source", vdata, 10);
+    object_p = vdata;
+
+    uvgetvr_c (uv_handle_p, H_BYTE, "telescop", vdata, 10);
+    telescope_name = vdata;
+
+    uvprobvr_c (uv_handle_p, "observer", vtype, &vlen, &vupd);
+    if (vupd) {
+	uvgetvr_c (uv_handle_p, H_BYTE, "observer", vdata, 10);
+	observer_name = vdata;
+    } else
+	observer_name = "unknown";
+
+    mount_p = 0;
+
+    uvgetvr_c (uv_handle_p, H_REAL, "epoch", (char *) &epoch, 1);
+    epoch_p = epoch;
+    epochRef_p = MDirection::J2000;
+    if (nearAbs (epoch_p, 1950.0, 0.01))
+	epochRef_p = MDirection::B1950;
+
+    // TODO: these should all be handled on-the-fly.
+    uvgetvr_c (uv_handle_p, H_INT, "npol", (char *) &npol_p, 1);
+    uvgetvr_c (uv_handle_p, H_INT, "pol", (char *) &pol_p, 1);
+    uvgetvr_c (uv_handle_p, H_REAL, "inttime", (char *) &inttime_p, 1);
+    uvgetvr_c (uv_handle_p, H_DBLE, "freq", (char *) &freq_p, 1);
+    freq_p *= 1e9; // GHz -> Hz
+
+    uvgetvr_c (uv_handle_p, H_DBLE, "ra", (char *) &ra_p, 1);
+    uvgetvr_c (uv_handle_p, H_DBLE, "dec", (char *) &dec_p, 1);
+
+    if (hexists_c (uv_handle_p, "gains"))
+	cout << "Warning: gains table present, but cannot apply them" << endl;
+    if (hexists_c (uv_handle_p, "bandpass"))
+	cout << "Warning: bandpass table present, but cannot apply them" << endl;
+    if (hexists_c (uv_handle_p, "leakage"))
+	cout << "Warning: leakage table present, but cannot apply them" << endl;
+
+    uvrewind_c (uv_handle_p);
+
+    // XXX: hardcoding assumption of full-Stokes XY pol
+    npol_p = 4;
+    corrType_p.resize (npol_p);
+    corrType_p(0) = Stokes::XX;
+    corrType_p(1) = Stokes::XY;
+    corrType_p(2) = Stokes::YX;
+    corrType_p(3) = Stokes::YY;
+    polmapping.resize (13);
+    polmapping = -1;
+    polmapping(-5 + 8) = 0;
+    polmapping(-6 + 8) = 3;
+    polmapping(-7 + 8) = 1;
+    polmapping(-8 + 8) = 2;
+
+    corrProduct_p.resize (2, npol_p);
+    corrProduct_p = 0;
+
+    for (i = 0; i < npol_p; i++) {
+	Fallible<Int> receptor = Stokes::receptor1 (Stokes::type (corrType_p(i)));
+	if (receptor.isValid ())
+	    corrProduct_p(0,i) = receptor;
+
+	receptor = Stokes::receptor2 (Stokes::type (corrType_p(i)));
+	if (receptor.isValid ())
+	    corrProduct_p(1,i) = receptor;
+    }
 }
 
 
@@ -472,14 +415,9 @@ void CarmaFiller::fillObsTables()
   ms_p.observation().addRow();
   MSObservationColumns msObsCol(ms_p.observation());
 
-  msObsCol.telescopeName().put(0,array_p);
-  msObsCol.observer().put(0,observer_p);
+  msObsCol.telescopeName ().put (0, telescope_name);
+  msObsCol.observer ().put (0, observer_name);
   msObsCol.project().put(0,project_p);
-  if (array_p == "HATCREEK") {
-    Vector<String> blog(1);
-    blog(0) = "See HISTORY for CARMA observing log";
-    msObsCol.log().put(0,blog);
-  }
 
   MSHistoryColumns msHisCol(ms_p.history());
 
@@ -626,9 +564,6 @@ void CarmaFiller::fillMSMainTable(Bool scan, Int snumbase)
 	nAnt_p[nArray_p-1] = max(nAnt_p[nArray_p-1],ant1);   // for MIRIAD, and also
 	nAnt_p[nArray_p-1] = max(nAnt_p[nArray_p-1],ant2);
 	ant1--; ant2--;                                      // make them 0-based for CASA
-
-	ant1 += nants_offset_p;     // correct for different array offsets
-	ant2 += nants_offset_p;
 
 	// should ant1 and ant2 be offset with (nArray_p-1)*nant_p ???
 	// in case there are multiple arrays???
@@ -793,25 +728,25 @@ void CarmaFiller::fillAntennaTable()
   Int nAnt=nants_p;
 
   arrayXYZ_p.resize(3);
-  if (array_p == "HATCREEK" || array_p == "BIMA") {     // Array center:
+  if (telescope_name == "HATCREEK" || telescope_name == "BIMA") {     // Array center:
     arrayXYZ_p(0) = -2523862.04;
     arrayXYZ_p(1) = -4123592.80;
     arrayXYZ_p(2) =  4147750.37;
-  } else if (array_p == "ATA") {
+  } else if (telescope_name == "ATA") {
       // ie same as hatcreek / bima -- correct ?????
     arrayXYZ_p(0) = -2523862.04;
     arrayXYZ_p(1) = -4123592.80;
     arrayXYZ_p(2) =  4147750.37;
-  } else if (array_p == "ATCA") {
+  } else if (telescope_name == "ATCA") {
     arrayXYZ_p(0) = -4750915.84;
     arrayXYZ_p(1) =  2792906.18;
     arrayXYZ_p(2) = -3200483.75;
-  } else if (array_p == "OVRO" || array_p == "CARMA") {
+  } else if (telescope_name == "OVRO" || telescope_name == "CARMA") {
     arrayXYZ_p(0) = -2397389.65197;
     arrayXYZ_p(1) = -4482068.56252;
     arrayXYZ_p(2) =  3843528.41479;
   } else {
-    cout << "Warning: unknown array position for "<<array_p<<endl;
+    cout << "Warning: unknown array position for "<<telescope_name<<endl;
     arrayXYZ_p = 0.0;
   }
   if(DEBUG(3)) cout << "number of antennas ="<<nAnt<<endl;
@@ -830,19 +765,19 @@ void CarmaFiller::fillAntennaTable()
   // exist in our CARMA datasets.
   // So, fill in some likely values
   Float diameter=25;                        //# most common size (:-)
-  if (array_p=="ATCA")     diameter=22;     //# only at 'low' freq !!
-  if (array_p=="HATCREEK") diameter=6;
-  if (array_p=="BIMA")     diameter=6;
-  if (array_p=="ATA")      diameter=6.1;
-  if (array_p=="CARMA")    diameter=8;
-  if (array_p=="OVRO")     diameter=10;
+  if (telescope_name=="ATCA")     diameter=22;     //# only at 'low' freq !!
+  if (telescope_name=="HATCREEK") diameter=6;
+  if (telescope_name=="BIMA")     diameter=6;
+  if (telescope_name=="ATA")      diameter=6.1;
+  if (telescope_name=="CARMA")    diameter=8;
+  if (telescope_name=="OVRO")     diameter=10;
 
-  if (nAnt == 15 && array_p=="OVRO") {
+  if (nAnt == 15 && telescope_name=="OVRO") {
     cout << "CARMA array (6 OVRO, 9 BIMA) assumed" << endl;
-    array_p = "CARMA";
-  } else  if (nAnt == 23 && array_p=="OVRO") {
+    telescope_name = "CARMA";
+  } else  if (nAnt == 23 && telescope_name=="OVRO") {
     cout << "CARMA array (6 OVRO, 9 BIMA, 8 SZA) assumed" << endl;
-    array_p = "CARMA";
+    telescope_name = "CARMA";
   }
 
   Matrix<Double> posRot = Rot3D (2, longitude);
@@ -909,7 +844,7 @@ void CarmaFiller::fillAntennaTable()
   // now do some things which only need to happen the first time around
 
   // store these items in non-standard keywords for now
-  ant.name().rwKeywordSet().define("ARRAY_NAME",array_p);
+  ant.name ().rwKeywordSet ().define ("ARRAY_NAME", telescope_name);
   ant.position().rwKeywordSet().define("ARRAY_POSITION",arrayXYZ_p);
 }
 
@@ -931,7 +866,7 @@ void CarmaFiller::fillSyscalTable()
     ms_p.sysCal().addRow();
     row++;  // should be a static, since this routine will be called again
 
-    msSys.antennaId().put(row,i);   //  i, or i+nants_offset_p ????
+    msSys.antennaId().put(row,i);
     msSys.feedId().put(row,0);
     msSys.spectralWindowId().put(row,-1);    // all of them for now .....
     msSys.time().put(row,time_p);
