@@ -91,7 +91,7 @@ public:
     void fillMSMainTable (Bool scan, Int snumbase);
     void fillAntennaTable ();
     void fillSyscalTable ();
-    void fillSpectralWindowTable (Bool use_lsrk=True);
+    void fillSpectralWindowTable ();
     void fillFieldTable ();
     void fillSourceTable ();
     void fillFeedTable ();
@@ -1005,7 +1005,7 @@ void CarmaFiller::fillSyscalTable()
 }
 
 
-void CarmaFiller::fillSpectralWindowTable(Bool use_lsrk)
+void CarmaFiller::fillSpectralWindowTable()
 {
   if (Debug(1)) cout << "CarmaFiller::fillSpectralWindowTable" << endl;
 
@@ -1026,15 +1026,10 @@ void CarmaFiller::fillSpectralWindowTable(Bool use_lsrk)
   MDirection dir(Quantity(ra_p, "rad"), Quantity(dec_p, "rad"), dirtype);
   MeasFrame frame(ep, obspos, dir);
 
-  MFrequency::Types freqsys_p;
-  if (use_lsrk) {
-    freqsys_p = MFrequency::LSRK;        // LSRD vs. LSRK
-  } else {
-    freqsys_p = MFrequency::LSRD;        // LSRD vs. LSRK
-  }
+  MFrequency::Types freqsys_p = MFrequency::LSRK;
 
   MFrequency::Convert tolsr(MFrequency::TOPO,
-			    MFrequency::Ref(freqsys_p, frame));     // LSRD vs. LSRK
+			    MFrequency::Ref(freqsys_p, frame));
   // fill out the polarization info (only 1 entry allowed for now)
   ms_p.polarization().addRow();
   msPol.numCorr().put(0,nCorr);
@@ -1628,7 +1623,6 @@ main(int argc, char **argv)
 	inp.create ("vis",     "",        "Name of CARMA dataset name",         "string");
 	inp.create ("ms",      "",        "Name of MeasurementSet",             "string");
 	inp.create ("tsys",    "False",   "Fill WEIGHT from Tsys in data?",     "bool");
-	inp.create ("lsrk",    "True",    "Use LSRK (instead of LSRD)?",        "bool");
 	inp.create ("polmode", "0",       "0 = single pol; 1 = Full XY",        "int");
 	inp.create ("snumbase","0",       "Starting SCAN_NUMBER value",         "int");
 	inp.readArguments (argc, argv);
@@ -1644,7 +1638,6 @@ main(int argc, char **argv)
 	    ms = vis.before ('.') + ".ms";
 
 	Bool apply_tsys = inp.getBool ("tsys");
-	Bool Qlsrk    = inp.getBool ("lsrk"); // LSRK or LSRD
 	Int  polmode  = inp.getInt ("polmode");
 	Int  snumbase = inp.getInt ("snumbase");
 
@@ -1665,7 +1658,7 @@ main(int argc, char **argv)
 	cf.fillAntennaTable ();
 	cf.fillMSMainTable (True, snumbase);
 	cf.fillSyscalTable ();
-	cf.fillSpectralWindowTable (Qlsrk);
+	cf.fillSpectralWindowTable ();
 	cf.fillFieldTable ();
 	cf.fillSourceTable ();
 	cf.fillFeedTable ();
