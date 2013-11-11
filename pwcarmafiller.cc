@@ -104,6 +104,7 @@ private:
 
     bool uv_hasvar (const char *varname);
     char *uv_getstr (const char *varname);
+    int uv_getint (const char *varname);
 
     String infile_p;
     Int uv_handle_p;
@@ -205,6 +206,16 @@ CarmaFiller::uv_getstr (const char *varname)
 }
 
 
+int
+CarmaFiller::uv_getint (const char *varname)
+{
+    int value;
+    uvgetvr_c (uv_handle_p, H_INT, varname, (char *) &value, 1);
+    // XXX: error checking!
+    return value;
+}
+
+
 void
 CarmaFiller::checkInput ()
 {
@@ -226,7 +237,7 @@ CarmaFiller::checkInput ()
     }
 
     // Get the initial array configuration
-    uvgetvr_c (uv_handle_p, H_INT, "nants", (char *) &nants_p, 1);
+    nants_p = uv_getint ("nants");
     uvgetvr_c (uv_handle_p, H_DBLE, "antpos", (char *) antpos, 3 * nants_p);
     uvgetvr_c (uv_handle_p, H_DBLE, "longitu", (char *) &longitude, 1);
 
@@ -262,8 +273,8 @@ CarmaFiller::checkInput ()
 	epochRef_p = MDirection::B1950;
 
     // TODO: these should all be handled on-the-fly.
-    uvgetvr_c (uv_handle_p, H_INT, "npol", (char *) &npol_p, 1);
-    uvgetvr_c (uv_handle_p, H_INT, "pol", (char *) &pol_p, 1);
+    npol_p = uv_getint ("npol");
+    pol_p = uv_getint ("pol");
     uvgetvr_c (uv_handle_p, H_REAL, "inttime", (char *) &inttime_p, 1);
     uvgetvr_c (uv_handle_p, H_DBLE, "freq", (char *) &freq_p, 1);
     freq_p *= 1e9; // GHz -> Hz
@@ -1245,7 +1256,7 @@ void CarmaFiller::Tracking(int record)
   }
 
   if (uv_hasvar ("antpos") && record) {
-    uvgetvr_c(uv_handle_p,H_INT, "nants", (char *)&nants_p,1);
+      nants_p = uv_getint ("nants");
     uvgetvr_c(uv_handle_p,H_DBLE,"antpos",(char *)antpos,3*nants_p);
     if (DEBUG(2)) {
       cout << "Found " << nants_p << " antennas for array "
