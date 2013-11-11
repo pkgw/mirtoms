@@ -82,7 +82,7 @@ public:
     CarmaFiller (String& infile, Int debug=0,
 		 Bool Qtsys=False, Bool Qarrays=False, Int polmode=0);
 
-    void checkInput (Block<Int>& window);
+    void checkInput ();
     Bool Debug (int level);
 
     void setupMeasurementSet (const String& MSFileName);
@@ -99,7 +99,7 @@ public:
     void fixEpochReferences ();
 
     void Tracking (int record);
-    void init_window (Block<Int>& window);
+    void init_window ();
 
 private:
     String infile_p;
@@ -188,7 +188,7 @@ Bool CarmaFiller::Debug(int level)
 }
 
 
-void CarmaFiller::checkInput(Block<Int>& window)
+void CarmaFiller::checkInput()
 {
   Bool ok=True;
   Int i, nread, nwread, vlen, vupd;
@@ -212,7 +212,7 @@ void CarmaFiller::checkInput(Block<Int>& window)
 
     if (nvis == 1) {
       // get the initial correllator setup
-      init_window(window);
+      init_window();
 
       //  should store nread + nwread, or handle it as option
       if (win.nspect > 0) {               // narrow band, with possibly wide band also
@@ -1514,12 +1514,12 @@ void CarmaFiller::Tracking(int record)
 //  (there has been some talk at the site to write subsets of
 //   the full data, which could break this routine)
 
-void CarmaFiller::init_window(Block<Int>& window)
+void CarmaFiller::init_window()
 {
   if (Debug(1)) cout << "CarmaFiller::init_window" << endl;
 
   char vtype[10];
-  int i, j, k, idx, vlen, vupd, nchan, nspect, nwide;
+  int i, idx, vlen, vupd, nchan, nspect, nwide;
 
   uvprobvr_c(uv_handle_p,"nchan",vtype,&vlen,&vupd);
   if (vupd) {
@@ -1607,21 +1607,6 @@ void CarmaFiller::init_window(Block<Int>& window)
     idx++;
   }
 
-  if (nwide > 0) {
-    idx = nspect;
-    if (window[0] > 0) {
-      for (j=0; j<nwide; j++)
-	win.keep[idx+j] = 0;
-      for (j=0; j<window.nelements(); j++) {
-	k = window[j]-1;
-	if (k >= 0 || k < nwide-2)
-	  win.keep[idx+k] = 1;
-	else
-	  cout << "### Warning: bad window band window id " << k+1 << endl;
-      }
-    }
-  }
-
   if (Debug(1)) {
     cout << "Layout of spectral windows (init_window): nspect=" << nspect
 	 << " nwide=" << nwide
@@ -1633,11 +1618,6 @@ void CarmaFiller::init_window(Block<Int>& window)
 	   << win.nschan[i] << " " << win.ischan[i] << " "
 	   << win.sfreq[i] <<  " " << win.sdf[i] <<  " " << win.restfreq[i]
 	   << "\n";
-
-    cout << "win: " ;
-    for (i=0; i<window.nelements(); i++)
-	cout << window[i] << " ";
-    cout << endl;
   }
 }
 
@@ -1650,7 +1630,6 @@ main(int argc, char **argv)
 	inp.version ("4 - PKGW hacked MIRIAD->MS converter");
 	inp.create ("vis",     "",        "Name of CARMA dataset name",         "string");
 	inp.create ("ms",      "",        "Name of MeasurementSet",             "string");
-	inp.create ("win",     "all",     "Which of the window averages",       "string");
 	inp.create ("tsys",    "False",   "Fill WEIGHT from Tsys in data?",     "bool");
 	inp.create ("arrays",  "False",   "DEBUG: Split multiple arrays?",      "bool");
 	inp.create ("lsrk",    "True",    "Use LSRK (instead of LSRD)?",        "bool");
@@ -1675,7 +1654,6 @@ main(int argc, char **argv)
 	Int  snumbase = inp.getInt ("snumbase");
 
 	Int i, debug = -1;
-	Block<Int> win;
 
 	for (i = 0; i < 99; i++) { // I don't understand what's going on here.
 	    if (!inp.debug (i)) {
@@ -1684,15 +1662,9 @@ main(int argc, char **argv)
 	    }
 	}
 
-	if (inp.getString ("win") == "all") {
-	    win.resize (1);
-	    win[0] = -1;
-	} else
-	    win = inp.getIntArray ("win");
-
 	CarmaFiller cf (vis, debug, Qtsys, Qarrays, polmode);
 
-	cf.checkInput (win);
+	cf.checkInput ();
 	cf.setupMeasurementSet (ms);
 	cf.fillObsTables ();
 	cf.fillAntennaTable ();
