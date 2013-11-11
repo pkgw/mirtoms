@@ -101,11 +101,8 @@ public:
 
     void Tracking (int record);
     void init_window (Block<Int>& narrow, Block<Int>& window);
-    void update_window ();
     void Error (char *msg);
     void Warning (char *msg);
-    void show ();
-    void close ();
 
 private:
     String infile_p;
@@ -885,7 +882,6 @@ void CarmaFiller::fillMSMainTable(Bool scan, Int snumbase)
     }
 
   } // for(grou) : loop over all visibilities
-  show();
 
   cout << infile_p << ": Processed " << group << " visibilities."
        << endl;
@@ -1530,7 +1526,6 @@ void CarmaFiller::Tracking(int record)
 			 << " at "
 			 << dra_p *206264.8062 << " "
 			 << ddec_p*206264.8062 << " arcsec." << endl;
-      if (Debug(1)) show();
 
       if (nfield >= MAXFIELD) {
 	cout << "Cannot handle more than " << MAXFIELD << " fields." << endl;
@@ -1710,28 +1705,6 @@ void CarmaFiller::init_window(Block<Int>& narrow, Block<Int>& window)
 }
 
 
-void CarmaFiller::update_window()
-{
-  if (Debug(1)) cout << "CarmaFiller::update_window" << endl;
-  throw(AipsError("Cannot update window configuration yet"));
-}
-
-
-void CarmaFiller::show()
-{
-#if 0
-  cout << "CarmaFiller::show()" << endl;
-  for (int i=0; i<source_p.nelements(); i++)  cout << "SOURCE_P_1: " << source_p[i] << endl;
-#endif
-}
-
-
-void CarmaFiller::close()
-{
-  // does nothing for now
-}
-
-
 int main(int argc, char **argv)
 {
   try {
@@ -1810,7 +1783,6 @@ int main(int argc, char **argv)
     bf.fillSourceTable();
     bf.fillFeedTable();
     bf.fixEpochReferences();
-    bf.close();
   }
   catch (AipsError x) {
       cerr << x.getMesg() << endl;
