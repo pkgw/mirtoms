@@ -51,7 +51,7 @@
 #include <miriad-c/miriad.h>
 
 #include <casa/namespace.h>
-
+
 // MIRIAD dataset MeasurementSet filler. Derived from bimafiller.
 // This version is CARMA specific, but in the end there is no
 // reason why this should be CARMA specific.
@@ -164,7 +164,7 @@ typedef struct window {     // CASA defines everything mid-band mid-interval
 
 void cause_coredump(void);
 
-
+
 // helper functions
 
 void show_version_info()
@@ -233,7 +233,7 @@ void linecal(int ndata, float *data, float phi1, float phi2)
   }
 }
 
-
+
 
 // a helper class
 
@@ -297,7 +297,7 @@ public:
   void Warning(char *msg);
   void show();
   void close();
-
+
 private:
   String                 infile_p;     // filename
   Int                    uv_handle_p;  // miriad handle
@@ -369,7 +369,7 @@ private:
   // Counters
   int    nvis;
 };
-
+
 // ==============================================================================================
 CarmaFiller::CarmaFiller(String& infile, Int debug,
 			 Bool Qtsys, Bool Qarrays, Bool Qlinecal, Int polmode)
@@ -446,7 +446,7 @@ Bool CarmaFiller::Debug(int level)
   if (level <= debug_p) ok=True;
   return ok;
 }
-
+
 // ==============================================================================================
 void CarmaFiller::checkInput(Block<Int>& narrow, Block<Int>& window)
 {
@@ -679,7 +679,7 @@ void CarmaFiller::checkInput(Block<Int>& narrow, Block<Int>& window)
     if (receptor.isValid()) corrProduct_p(1,i)=receptor;
   }
 }
-
+
 // ==============================================================================================
 void CarmaFiller::setupMeasurementSet(const String& MSFileName, Bool useTSM)
 {
@@ -846,7 +846,7 @@ void CarmaFiller::setupMeasurementSet(const String& MSFileName, Bool useTSM)
   ms_p=ms;
   msc_p = new MSColumns(ms_p);
 } // setupMeasurementSet()
-
+
 // ==============================================================================================
 #define HISTLINE 8192
 void CarmaFiller::fillObsTables()
@@ -897,7 +897,7 @@ void CarmaFiller::fillObsTables()
   }
   hisclose_c(uv_handle_p);
 } // fillObsTables()
-
+
 // ==============================================================================================
 //
 // Loop over the visibility data and fill the main table of the MeasurementSet
@@ -1218,7 +1218,7 @@ void CarmaFiller::fillMSMainTable(Bool scan, Int snumbase)
   }
 #endif
 } // fillMSMainTable()
-
+
 void CarmaFiller::fillAntennaTable()
 {
   if (Debug(1)) cout << "CarmaFiller::fillAntennaTable" << endl;
@@ -1401,7 +1401,7 @@ void CarmaFiller::fillAntennaTable()
   arr.position().rwKeywordSet().define("MEASURE_REFERENCE","ITRF");
 #endif
 } // fillAntennaTable
-
+
 // ==============================================================================================
 void CarmaFiller::fillSyscalTable()
 {
@@ -1436,7 +1436,7 @@ void CarmaFiller::fillSyscalTable()
   // timesorted. A temporary table needs to be written with all records,
   // which then needs to be sorted and 'recomputed'
 }
-
+
 // ==============================================================================================
 void CarmaFiller::fillSpectralWindowTable(Bool use_lsrk)
 {
@@ -1567,7 +1567,7 @@ void CarmaFiller::fillSpectralWindowTable(Bool use_lsrk)
   //PJT msSpW.restFrequency().rwKeywordSet().define("MEASURE_REFERENCE","REST");
   //msSpW.refFrequency().rwKeywordSet().define("MEASURE_REFERENCE","TOPO");
 }
-
+
 // ==============================================================================================
 void CarmaFiller::fillFieldTable()
 {
@@ -1640,7 +1640,7 @@ void CarmaFiller::fillFieldTable()
     }
   }
 }
-
+
 // ==============================================================================================
 void CarmaFiller::fillSourceTable()
 {
@@ -1758,7 +1758,7 @@ void CarmaFiller::fillFeedTable()
     }
   }
 }
-
+
 // ==============================================================================================
 void CarmaFiller::fixEpochReferences() {
 
@@ -2175,7 +2175,7 @@ void CarmaFiller::close()
   // does nothing for now
 }
 
-
+
 
 // ==============================================================================================
 int main(int argc, char **argv)
