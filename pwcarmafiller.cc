@@ -80,35 +80,6 @@ typedef struct window {
 } WINDOW;
 
 
-
-
-// helper functions
-
-void show_version_info()
-{
-  cout << "============================================================\n";
-  cout << "CarmaFiller - last few updates:\n";
-  //  cout << "  22-oct:  source names (if > 1) in FIELD corrected\n";
-  //  cout << "  23-oct:  correct reference to FIELD_ID in main table\n";
-  //  cout << "           reads linelength, linecal=1 is now default and applied it\n";
-  //  cout << "  26-oct:  CARMA is now array name\n";
-  //  cout << "           FIELD table:  filled in CODE, fixed RA/DEC\n";
-  //  cout << "           SOURCE table: working\n";
-  cout << "  27-oct:  ?? IRTF carma position but geodetic/geocentric issue ??\n";
-  cout << "  28-oct:  linecal turned off by default, has a problem\n";
-  cout << "           SPECTRAL_WINDOW fixes for doppler/lsr/freqref\n";
-  cout << "   6-nov:  linecal fixed,but defaults to False still; data ok\n";
-  cout << "   2-dec   defaults now not to write out the CARMA wide bands \n";
-  cout << "   4-feb   fixed table for mode=channel cleaning\n";
-  cout << "  23-feb   LSRK now default\n";
-  cout << "  31-mar   TOPO->LSR conversion corrected\n";
-  cout << "           ...\n";
-  cout << "============================================================\n";
-}
-
-
-// Convert fits date string of form dd/mm/yy to mjd seconds
-
 Double date2mjd(const String& date)
 {
   Int day,month,year;
@@ -2095,8 +2066,6 @@ void CarmaFiller::close()
 // ==============================================================================================
 int main(int argc, char **argv)
 {
-  Bool show_info = False;
-
   try {
 
     // Define inputs
@@ -2139,7 +2108,6 @@ int main(int argc, char **argv)
         debug = i-1;
         break;
       }
-    if (debug>1) show_info = True;
 
     if (!t.isDirectory())
       throw(AipsError("Input file does not appear to be miriad dataset"));
@@ -2182,7 +2150,5 @@ int main(int argc, char **argv)
       cerr << x.getMesg() << endl;
   }
 
-  if (show_info > 0)
-      show_version_info();
   return 0;
 }
