@@ -1,4 +1,4 @@
-/* pwcarmafiller: hacked MIRIAD to MeasurementSet conversion
+/* mirtoms: hacked MIRIAD to MeasurementSet conversion
    adapted from Peter Teuben's carmafiller by Peter Williams.
 
    Copyright 2010-2013 Peter Williams, Peter Teuben
