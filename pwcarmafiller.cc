@@ -614,7 +614,7 @@ void CarmaFiller::fillMSMainTable(Bool scan, Int snumbase)
     casapolidx = polmapping (mirpol + 8);
 
     if (casapolidx < 0)
-	throw AipsError ("CarmaFiller: unexpected MIRIAD polarization " + mirpol);
+	throw AipsError ("unexpected MIRIAD polarization " + mirpol);
 
     // first construct the data (vis & flag) in a single long array
     // containing all spectral windows
@@ -1003,7 +1003,7 @@ void CarmaFiller::fillSpectralWindowTable()
       msSpW.freqGroupName().put(i,"MULTI-CHANNEL-AVG");
       break;
     default:
-      throw(AipsError("Bad code for a spectral window"));
+      throw AipsError ("bad code for a spectral window");
       break;
     }
   }
@@ -1404,29 +1404,29 @@ void CarmaFiller::init_window()
     else if (nspect==1)
       win.ischan[0] = 1;
     else
-      throw(AipsError("missing ischan"));
+      throw AipsError ("missing ischan");
 
     if (uv_hasvar ("nschan"))
       uvgetvr_c(uv_handle_p,H_INT,"nschan",(char *)win.nschan, nspect);
     else if (nspect==1)
       win.nschan[0] = nchan_p;
     else
-      throw(AipsError("missing nschan"));
+      throw AipsError ("missing nschan");
 
     if (uv_hasvar ("restfreq"))
 	uv_getdoubles ("restfreq", win.restfreq, nspect);
     else
-      throw(AipsError("missing restfreq"));
+      throw AipsError ("missing restfreq");
 
     if (uv_hasvar ("sdf"))
 	uv_getdoubles ("sdf", win.sdf, nspect);
     else if (nspect>1)
-      throw(AipsError("missing sdf"));
+      throw AipsError ("missing sdf");
 
     if (uv_hasvar ("sfreq"))
 	uv_getdoubles ("sfreq", win.sfreq, nspect);
     else
-      throw(AipsError("missing sfreq"));
+      throw AipsError ("missing sfreq");
   }
 
   if (nwide > 0 && nwide <= MAXWIDE) {
