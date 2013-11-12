@@ -87,7 +87,7 @@ public:
     CarmaFiller (String& infile, Int debug_level=0, Bool apply_tsys=False);
 
     void checkInput ();
-    void setupMeasurementSet (const String& MSFileName);
+    void setupMeasurementSet (const String& ms_path);
     void fillObsTables ();
     void fillMSMainTable (Bool scan, Int snumbase);
     void fillAntennaTable ();
@@ -115,7 +115,6 @@ private:
     MeasurementSet ms_p;
     MSColumns *msc_p;
     Int debug_level;
-    Int nIF_p;
     String telescope_name, project_p, object_p, telescope_p,
 	observer_name, timsys_p;
     Vector<Int> nPixel_p, corrType_p, corrIndex_p;
@@ -346,116 +345,87 @@ CarmaFiller::checkInput ()
 }
 
 
-void CarmaFiller::setupMeasurementSet(const String& MSFileName)
+void
+CarmaFiller::setupMeasurementSet (const String& ms_path)
 {
-  if (DEBUG(1)) cout << "CarmaFiller::setupMeasurementSet" << endl;
+    // Begin cargo-cult programming.
 
-  Int nCorr = npol_p;   // STOKES axis
-  Int nChan = nchan_p;  // we are only exporting the narrow channels to the MS
+    TableDesc td = MS::requiredTableDesc ();
+    MS::addColumnToDesc (td, MS::DATA, 2);
+    td.removeColumn (MS::columnName (MS::FLAG));
+    MS::addColumnToDesc (td, MS::FLAG, 2);
 
-  nIF_p = win.nspect;   // number of spectral windows (for narrow channels only)
+    td.defineHypercolumn ("TiledData", 3, stringToVector (MS::columnName (MS::DATA)));
+    td.defineHypercolumn ("TiledFlag", 3, stringToVector (MS::columnName (MS::FLAG)));
+    td.defineHypercolumn ("TiledUVW", 2, stringToVector (MS::columnName (MS::UVW)));
 
-  // Make the MS table
-  TableDesc td = MS::requiredTableDesc();
+    SetupNewTable newtab (ms_path, td, Table::New);
+    IncrementalStMan incrStMan ("ISMData");
+    newtab.bindAll (incrStMan, True);
+    StandardStMan aipsStMan;
 
-  MS::addColumnToDesc(td, MS::DATA,2);
-  td.removeColumn(MS::columnName(MS::FLAG));
-  MS::addColumnToDesc(td, MS::FLAG,2);
+    Int tileSize = nchan_p / 10 + 1;
 
-  td.defineHypercolumn("TiledData",3,
-		       stringToVector(MS::columnName(MS::DATA)));
-  td.defineHypercolumn("TiledFlag",3,
-		       stringToVector(MS::columnName(MS::FLAG)));
-  td.defineHypercolumn("TiledUVW",2,
-		       stringToVector(MS::columnName(MS::UVW)));
+    TiledShapeStMan tiledStMan1 ("TiledData",IPosition (3, npol_p, tileSize,
+							16384 / npol_p / tileSize));
+    TiledShapeStMan tiledStMan1f ("TiledFlag", IPosition (3, npol_p, tileSize,
+							  16384 / npol_p / tileSize));
+    TiledShapeStMan tiledStMan2 ("TiledWeight",	IPosition (3, npol_p, tileSize,
+							   16384 / npol_p / tileSize));
+    TiledColumnStMan tiledStMan3 ("TiledUVW", IPosition (2, 3, 1024));
 
-  if (DEBUG(1))  cout << "Creating MS=" << MSFileName  << endl;
-  SetupNewTable newtab(MSFileName, td, Table::New);
+    newtab.bindColumn (MS::columnName (MS::DATA), tiledStMan1);
+    newtab.bindColumn (MS::columnName (MS::FLAG), tiledStMan1f);
+    newtab.bindColumn (MS::columnName (MS::UVW), tiledStMan3);
 
-  // Set the default Storage Manager to be the Incr one
-  IncrementalStMan incrStMan ("ISMData");;
-  newtab.bindAll(incrStMan, True);
-  // StManAipsIO aipsStMan;  // don't use this anymore
-  StandardStMan aipsStMan;  // these are more efficient now
+    TableLock lock (TableLock::PermanentLocking);
+    MeasurementSet ms (newtab, lock);
+    Table::TableOption option = Table::New;
 
+    ms.createDefaultSubtables (option);
 
-  Int tileSize = nChan / 10 + 1;
+    ms.spectralWindow ().addColumn (ArrayColumnDesc<Int>(
+					MSSpectralWindow::columnName(MSSpectralWindow::ASSOC_SPW_ID),
+					MSSpectralWindow::columnStandardComment(MSSpectralWindow::ASSOC_SPW_ID)));
 
-  TiledShapeStMan tiledStMan1("TiledData",
-			      IPosition(3,nCorr,tileSize,
-					16384/nCorr/tileSize));
-  TiledShapeStMan tiledStMan1f("TiledFlag",
-			       IPosition(3,nCorr,tileSize,
-					 16384/nCorr/tileSize));
-  TiledShapeStMan tiledStMan2("TiledWeight",
-			      IPosition(3,nCorr,tileSize,
-					16384/nCorr/tileSize));
-  TiledColumnStMan tiledStMan3("TiledUVW",
-			       IPosition(2,3,1024));
+    ms.spectralWindow ().addColumn (ArrayColumnDesc<String>(
+					MSSpectralWindow::columnName(MSSpectralWindow::ASSOC_NATURE),
+					MSSpectralWindow::columnStandardComment(MSSpectralWindow::ASSOC_NATURE)));
 
-  // Bind the DATA and FLAG columns to the tiled stman
-  newtab.bindColumn(MS::columnName(MS::DATA),tiledStMan1);
-  newtab.bindColumn(MS::columnName(MS::FLAG),tiledStMan1f);
-  newtab.bindColumn(MS::columnName(MS::UVW),tiledStMan3);
+    ms.spectralWindow ().addColumn (ScalarColumnDesc<Int>(
+					MSSpectralWindow::columnName(MSSpectralWindow::DOPPLER_ID),
+					MSSpectralWindow::columnStandardComment(MSSpectralWindow::DOPPLER_ID)));
 
-  TableLock lock(TableLock::PermanentLocking);
-  MeasurementSet ms(newtab,lock);
+    // the SOURCE table; 1 extra optional column needed
+    TableDesc sourceDesc = MSSource::requiredTableDesc ();
+    MSSource::addColumnToDesc (sourceDesc, MSSourceEnums::REST_FREQUENCY, 1);
+    SetupNewTable sourceSetup (ms.sourceTableName (), sourceDesc, option);
+    ms.rwKeywordSet ().defineTable (MS::keywordName(MS::SOURCE), Table (sourceSetup));
 
-  // create all subtables
-  // we make new tables with 0 rows
-  Table::TableOption option=Table::New;
+    // the DOPPLER table; no optional columns needed
+    TableDesc dopplerDesc = MSDoppler::requiredTableDesc ();
+    SetupNewTable dopplerSetup (ms.dopplerTableName (),dopplerDesc, option);
+    ms.rwKeywordSet ().defineTable (MS::keywordName(MS::DOPPLER), Table (dopplerSetup));
 
-  // Set up the default subtables for the MS
-  ms.createDefaultSubtables(option);
+    // the SYSCAL table; 1 optional column needed
+    TableDesc syscalDesc = MSSysCal::requiredTableDesc ();
+    MSSysCal::addColumnToDesc (syscalDesc, MSSysCalEnums::TSYS, 1);
+    SetupNewTable syscalSetup (ms.sysCalTableName (), syscalDesc, option);
+    ms.rwKeywordSet ().defineTable (MS::keywordName (MS::SYSCAL), Table (syscalSetup));
 
-  // Add some optional columns to the required tables
-  ms.spectralWindow().addColumn(ArrayColumnDesc<Int>(
-    MSSpectralWindow::columnName(MSSpectralWindow::ASSOC_SPW_ID),
-    MSSpectralWindow::columnStandardComment(MSSpectralWindow::ASSOC_SPW_ID)));
+    ms.initRefs(); // update the references to the subtable keywords
 
-  ms.spectralWindow().addColumn(ArrayColumnDesc<String>(
-    MSSpectralWindow::columnName(MSSpectralWindow::ASSOC_NATURE),
-    MSSpectralWindow::columnStandardComment(MSSpectralWindow::ASSOC_NATURE)));
+    { 
+	// Set the TableInfo. I'm assuming that the braces are to trigger a destructor.
+	TableInfo& info (ms.tableInfo ());
+	info.setType (TableInfo::type (TableInfo::MEASUREMENTSET));
+	info.setSubType (String ("MIRIAD"));
+	info.readmeAddLine ("made with pwcarmafiller");
+    }
 
-  ms.spectralWindow().addColumn(ScalarColumnDesc<Int>(
-    MSSpectralWindow::columnName(MSSpectralWindow::DOPPLER_ID),
-    MSSpectralWindow::columnStandardComment(MSSpectralWindow::DOPPLER_ID)));
-
-  // Now setup some optional columns::
-
-  // the SOURCE table, 1 extra optional column needed
-  TableDesc sourceDesc = MSSource::requiredTableDesc();
-  MSSource::addColumnToDesc(sourceDesc,MSSourceEnums::REST_FREQUENCY,1);
-  SetupNewTable sourceSetup(ms.sourceTableName(),sourceDesc,option);
-  ms.rwKeywordSet().defineTable(MS::keywordName(MS::SOURCE),
-                                     Table(sourceSetup));
-
-  // the DOPPLER table, no optional columns needed
-  TableDesc dopplerDesc = MSDoppler::requiredTableDesc();
-  SetupNewTable dopplerSetup(ms.dopplerTableName(),dopplerDesc,option);
-  ms.rwKeywordSet().defineTable(MS::keywordName(MS::DOPPLER),
-                                     Table(dopplerSetup));
-
-  // the SYSCAL table, 1 optional column needed
-  TableDesc syscalDesc = MSSysCal::requiredTableDesc();
-  MSSysCal::addColumnToDesc(syscalDesc,MSSysCalEnums::TSYS,1);
-  SetupNewTable syscalSetup(ms.sysCalTableName(),syscalDesc,option);
-  ms.rwKeywordSet().defineTable(MS::keywordName(MS::SYSCAL),
-                                     Table(syscalSetup));
-
-  // update the references to the subtable keywords
-  ms.initRefs();
-
-  { // Set the TableInfo
-    TableInfo& info(ms.tableInfo());
-    info.setType(TableInfo::type(TableInfo::MEASUREMENTSET));
-    info.setSubType(String("MIRIAD/CARMA"));
-    info.readmeAddLine("Made with CarmaFiller");
-  }
-
-  ms_p=ms;
-  msc_p = new MSColumns(ms_p);
-} // setupMeasurementSet()
+    ms_p = ms;
+    msc_p = new MSColumns (ms_p);
+}
 
 
 #define HISTLINE 8192
@@ -531,7 +501,7 @@ void CarmaFiller::fillMSMainTable(Bool scan, Int snumbase)
   Bool lastRowFlag = False;
 
   if (DEBUG(1))
-      cout << "Writing " << nIF_p << " spectral windows" << endl;
+      cout << "Writing " << win.nspect << " spectral windows" << endl;
 
   int nread, nwread;
   Int ant1, ant2;
@@ -677,7 +647,7 @@ void CarmaFiller::fillMSMainTable(Bool scan, Int snumbase)
     if (polsleft == 0 && !allTrue (flag)) {
 	// done with this set of simultaneous pols, and not all flagged.
 
-	for (Int ifno=0; ifno < nIF_p; ifno++) {
+	for (Int ifno=0; ifno < win.nspect; ifno++) {
 	    if (win.keep[ifno]==0) continue;
 	    // IFs go to separate rows in the MS, pol's do not!
 	    ms_p.addRow();
