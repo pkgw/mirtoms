@@ -101,7 +101,7 @@ public:
 private:
     void setup_tracking ();
     void track_updates ();
-    void init_window ();
+    void init_window_info ();
 
     bool uv_hasvar (const char *varname);
     char *uv_getstr (const char *varname);
@@ -252,7 +252,8 @@ CarmaFiller::checkInput ()
     uvwread_c (uv_handle_p, wdata, wflags, MAXCHAN, &nwread);
     if (nread <= 0 && nwread <= 0)
 	throw AipsError ("no UV data present");
-    init_window ();
+
+    init_window_info ();
 
     if (win.nspect > 0) {
 	nchan_p = nread;
@@ -1212,108 +1213,97 @@ CarmaFiller::track_updates ()
     }
 }
 
-//
-//  this is also a nasty routine. It makes assumptions on
-//  a relationship between narrow and window averages
-//  which normally exists for CARMA telescope data, but which
-//  in principle can be modified by uvcat/uvaver and possibly
-//  break this routine...
-//  (there has been some talk at the site to write subsets of
-//   the full data, which could break this routine)
 
-void CarmaFiller::init_window()
+void
+CarmaFiller::init_window_info ()
 {
-  if (DEBUG(1)) cout << "CarmaFiller::init_window" << endl;
+    /* "this is also a nasty routine. It makes assumptions on a relationship
+       between narrow and window averages which normally exists for CARMA
+       telescope data, but which in principle can be modified by uvcat/uvaver
+       and possibly break this routine... (there has been some talk at the
+       site to write subsets of the full data, which could break this routine)
+    */
 
-  int i, idx, nchan, nspect, nwide;
+    int nchan, nspect, nwide;
 
-  if (uv_hasvar ("nchan")) {
-    uvrdvr_c(uv_handle_p,H_INT,"nchan",(char *)&nchan, NULL, 1);
-  } else {
-    nchan = 0;
-    if (DEBUG(1)) cout << "nchan = 0" << endl;
-  }
+    if (uv_hasvar ("nchan"))
+	uvrdvr_c (uv_handle_p, H_INT, "nchan", (char *) &nchan, NULL, 1);
+    else
+	nchan = 0;
 
-  if (uv_hasvar ("nspect")) {
-    uvrdvr_c(uv_handle_p,H_INT,"nspect",(char *)&nspect, NULL, 1);
+    if (uv_hasvar ("nspect"))
+	uvrdvr_c (uv_handle_p, H_INT, "nspect", (char *) &nspect, NULL, 1);
+    else
+	nspect = 0;
+
     win.nspect = nspect;
-  } else
-    win.nspect = nspect = 0;
 
-  if (uv_hasvar ("nwide")) {
-    uvrdvr_c(uv_handle_p,H_INT,"nwide",(char *)&nwide, NULL, 1);
+    if (uv_hasvar ("nwide"))
+	uvrdvr_c (uv_handle_p, H_INT, "nwide", (char *) &nwide, NULL, 1);
+    else
+	nwide = 0;
+
     win.nwide = nwide;
-  } else
-    win.nwide = nwide = 0;
 
-  if (nspect > 0 && nspect <= MAXWIN) {
-    if (uv_hasvar ("ischan"))
-      uvgetvr_c(uv_handle_p,H_INT,"ischan",(char *)win.ischan, nspect);
-    else if (nspect==1)
-      win.ischan[0] = 1;
-    else
-      throw AipsError ("missing ischan");
+    if (nspect > 0 && nspect <= MAXWIN) {
+	if (uv_hasvar ("ischan"))
+	    uvgetvr_c (uv_handle_p, H_INT, "ischan", (char *) win.ischan, nspect);
+	else if (nspect == 1)
+	    win.ischan[0] = 1;
+	else
+	    throw AipsError ("missing ischan");
 
-    if (uv_hasvar ("nschan"))
-      uvgetvr_c(uv_handle_p,H_INT,"nschan",(char *)win.nschan, nspect);
-    else if (nspect==1)
-      win.nschan[0] = nchan_p;
-    else
-      throw AipsError ("missing nschan");
+	if (uv_hasvar ("nschan"))
+	    uvgetvr_c (uv_handle_p, H_INT, "nschan", (char *) win.nschan, nspect);
+	else if (nspect == 1)
+	    win.nschan[0] = nchan_p;
+	else
+	    throw AipsError ("missing nschan");
 
-    if (uv_hasvar ("restfreq"))
-	uv_getdoubles ("restfreq", win.restfreq, nspect);
-    else
-      throw AipsError ("missing restfreq");
+	if (uv_hasvar ("restfreq"))
+	    uv_getdoubles ("restfreq", win.restfreq, nspect);
+	else
+	    throw AipsError ("missing restfreq");
 
-    if (uv_hasvar ("sdf"))
-	uv_getdoubles ("sdf", win.sdf, nspect);
-    else if (nspect>1)
-      throw AipsError ("missing sdf");
+	if (uv_hasvar ("sdf"))
+	    uv_getdoubles ("sdf", win.sdf, nspect);
+	else if (nspect > 1)
+	    throw AipsError ("missing sdf");
 
-    if (uv_hasvar ("sfreq"))
-	uv_getdoubles ("sfreq", win.sfreq, nspect);
-    else
-      throw AipsError ("missing sfreq");
-  }
+	if (uv_hasvar ("sfreq"))
+	    uv_getdoubles ("sfreq", win.sfreq, nspect);
+	else
+	    throw AipsError ("missing sfreq");
+    }
 
-  if (nwide > 0 && nwide <= MAXWIDE) {
-    if (uv_hasvar ("wfreq"))
-	uv_getfloats ("wfreq", win.wfreq, nwide);
-    if (uv_hasvar ("wwidth"))
-	uv_getfloats ("wwidth", win.wwidth, nwide);
-  }
+    if (nwide > 0 && nwide <= MAXWIDE) {
+	if (uv_hasvar ("wfreq"))
+	    uv_getfloats ("wfreq", win.wfreq, nwide);
+	if (uv_hasvar ("wwidth"))
+	    uv_getfloats ("wwidth", win.wwidth, nwide);
+    }
 
-  for (i=0; i<nspect; i++) {
-    win.code[i] = 'N';
-    win.keep[i] = 1;
-  }
+    // cidx points into the combined win.xxx[] elements
+    int cidx = 0;
 
-  idx = (nspect > 0 ? nspect : 0);           // idx points into the combined win.xxx[] elements
-  for (i=0; i<nwide; i++) {
-    Int side = (win.sdf[i] < 0 ? -1 : 1);
-    win.code[idx]     = 'S';
-    win.keep[idx]     = 1;
-    win.ischan[idx]   = nchan + i + 1;
-    win.nschan[idx]   = 1;
-    win.sfreq[idx]    = win.wfreq[i];
-    win.sdf[idx]      = side * win.wwidth[i];
-    win.restfreq[idx] = -1.0;  // no meaning
-    idx++;
-  }
+    for (int i = 0; i < nspect; i++) {
+	win.code[cidx] = 'N';
+	win.keep[cidx] = 1;
+	cidx++;
+    }
 
-  if (DEBUG(1)) {
-    cout << "Layout of spectral windows (init_window): nspect=" << nspect
-	 << " nwide=" << nwide
-	 << "\n";
-    cout << "(N=narrow    W=wide,   S=spectral window averages)" << endl;
+    for (int i = 0; i < nwide; i++) {
+	Int side = win.sdf[i] < 0 ? -1 : 1;
 
-    for (i=0; i<nspect+nwide; i++)
-      cout << win.code[i] << ": " << i+1  << " " << win.keep[i] << " "
-	   << win.nschan[i] << " " << win.ischan[i] << " "
-	   << win.sfreq[i] <<  " " << win.sdf[i] <<  " " << win.restfreq[i]
-	   << "\n";
-  }
+	win.code[cidx] = 'S';
+	win.keep[cidx] = 1;
+	win.ischan[cidx] = nchan + i + 1;
+	win.nschan[cidx] = 1;
+	win.sfreq[cidx] = win.wfreq[i];
+	win.sdf[cidx] = side * win.wwidth[i];
+	win.restfreq[cidx] = -1.0; // no meaning
+	cidx++;
+    }
 }
 
 
