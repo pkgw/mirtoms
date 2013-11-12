@@ -948,7 +948,7 @@ void
 CarmaFiller::fillSourceTable ()
 {
     MSSourceColumns& msSource (msc_p->source ());
-    Int numsrc = 0;
+    Int srcidx = -1;
     Vector<Double> radec(2);
 
     for (uInt i = 0; i < source_p.nelements (); i++) {
@@ -959,32 +959,32 @@ CarmaFiller::fillSourceTable ()
 		break;
 
 	if (j < i)
-	    break; // duplicate source
+	    continue; // duplicate source
 
-	numsrc++;
+	srcidx++;
 	ms_p.source ().addRow ();
 
 	radec(0) = ras_p[i];
 	radec(1) = decs_p[i];
 
-	msSource.sourceId ().put (numsrc, numsrc);
-	msSource.name ().put (numsrc, source_p[i]);
+	msSource.sourceId ().put (srcidx, srcidx);
+	msSource.name ().put (srcidx, source_p[i]);
 	// "FIX it due to a bug in MS2 code (6feb2001)":
-	msSource.spectralWindowId ().put (numsrc, 0);
-	msSource.direction ().put (numsrc, radec);
+	msSource.spectralWindowId ().put (srcidx, 0);
+	msSource.direction ().put (srcidx, radec);
 
 	if (win.nspect > 0) {
 	    Vector<Double> restFreq(win.nspect);
 	    for (Int i = 0; i < win.nspect; i++)
 		restFreq(i) = win.restfreq[i] * 1e9;
 
-	    msSource.numLines ().put (numsrc, win.nspect);
-	    msSource.restFrequency ().put (numsrc, restFreq);
+	    msSource.numLines ().put (srcidx, win.nspect);
+	    msSource.restFrequency ().put (srcidx, restFreq);
 	}
 
 	// valid at all times:
-	msSource.time ().put (numsrc, 0.0);
-	msSource.interval ().put (numsrc, 0);
+	msSource.time ().put (srcidx, 0.0);
+	msSource.interval ().put (srcidx, 0);
     }
 }
 
