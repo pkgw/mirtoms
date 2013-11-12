@@ -100,7 +100,7 @@ public:
 
 private:
     void setup_tracking ();
-    void track_updates (int record);
+    void track_updates ();
     void init_window ();
 
     bool uv_hasvar (const char *varname);
@@ -530,7 +530,7 @@ CarmaFiller::fillMSMainTable (Int snumbase)
 	    interval = inttime_p;
 
 	    if (uvupdate_c (uv_handle_p))
-		track_updates (recnum); // something important changed.
+		track_updates (); // something important changed.
 
 	    // CARMA stuff for different "arrays" in the MS
 	    nAnt_p[num_arrays-1] = max (nAnt_p[num_arrays-1], ant1);
@@ -1122,14 +1122,14 @@ CarmaFiller::setup_tracking ()
 
 
 void
-CarmaFiller::track_updates (int record)
+CarmaFiller::track_updates ()
 {
     // "uv_hasvar" is a misnomer here. It returns true if the variable has been updated.
 
     if (uv_hasvar ("inttime"))
 	inttime_p = uv_getfloat ("inttime");
 
-    if (uv_hasvar ("antpos") && record > 0) {
+    if (uv_hasvar ("antpos")) {
 	nants_p = uv_getint ("nants");
 	uv_getdoubles ("antpos", antpos, 3 * nants_p);
     }
