@@ -1274,11 +1274,10 @@ main (int argc, char **argv)
     try {
 	Input inp (1);
 	inp.version ("");
-	inp.create ("vis", "", "Name of CARMA dataset name", "string");
-	inp.create ("ms", "", "Name of MeasurementSet", "string");
-	inp.create ("tsys", "False", "Fill WEIGHT from Tsys in data?", "bool");
-	inp.create ("snumbase", "0", "Starting SCAN_NUMBER value", "int");
-	inp.create ("polmode", "0", "(deprecated; ignored)", "int");
+	inp.create ("vis", "", "path of input MIRIAD dataset", "string");
+	inp.create ("ms", "", "path of output MeasurementSet dataset", "string");
+	inp.create ("tsys", "False", "fill WEIGHT from Tsys in data?", "bool");
+	inp.create ("snumbase", "0", "starting SCAN_NUMBER value", "int");
 	inp.readArguments (argc, argv);
 
 	String vis (inp.getString ("vis"));
