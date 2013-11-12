@@ -1024,61 +1024,60 @@ CarmaFiller::fillSourceTable ()
 }
 
 
-void CarmaFiller::fillFeedTable()
+void
+CarmaFiller::fillFeedTable ()
 {
-  if (DEBUG(1)) cout << "CarmaFiller::fillFeedTable" << endl;
+    MSFeedColumns msfc (ms_p.feed ());
+    MSPolarizationColumns& msPolC (msc_p->polarization ());
 
-  MSFeedColumns msfc(ms_p.feed());
+    Int numCorr = msPolC.numCorr ()(0);
+    Vector<String> rec_type(2);
+    rec_type = "";
 
-  // find out the POLARIZATION_TYPE
-  // In the fits files we handle there can be only a single, uniform type
-  // of polarization so the following should work.
-  MSPolarizationColumns& msPolC(msc_p->polarization());
-
-  Int numCorr=msPolC.numCorr()(0);
-  Vector<String> rec_type(2); rec_type="";
-  if (corrType_p(0)>=Stokes::RR && corrType_p(numCorr-1)<=Stokes::LL) {
-      rec_type(0)="R"; rec_type(1)="L";
-  }
-  if (corrType_p(0)>=Stokes::XX && corrType_p(numCorr-1)<=Stokes::YY) {
-      rec_type(0)="X"; rec_type(1)="Y";
-  }
-
-  Matrix<Complex> polResponse(2,2);
-  polResponse=0.; polResponse(0,0)=polResponse(1,1)=1.;
-  Matrix<Double> offset(2,2); offset=0.;
-  Vector<Double> position(3); position=0.;
-  Vector<Double> ra(2);
-  ra = 0.0;
-
-  // fill the feed table
-  // will only do UP TO the largest antenna referenced in the dataset
-  Int row=-1;
-  if (DEBUG(3)) cout << "DEBUG1 :: " << nAnt_p.nelements() << endl;
-  for (Int arr=0; arr< (Int)nAnt_p.nelements(); arr++) {
-    if (DEBUG(3)) cout << "DEBUG2 :: " << nAnt_p[arr] << endl;
-    for (Int ant=0; ant<nAnt_p[arr]; ant++) {
-      ms_p.feed().addRow(); row++;
-
-      msfc.antennaId().put(row,ant);
-      msfc.beamId().put(row,-1);
-      msfc.feedId().put(row,0);
-      msfc.interval().put(row,DBL_MAX);
-
-      // msfc.phasedFeedId().put(row,-1);    // now optional
-      msfc.spectralWindowId().put(row,-1);
-      msfc.time().put(row,0.);
-      msfc.numReceptors().put(row,2);
-      msfc.beamOffset().put(row,offset);
-      msfc.polarizationType().put(row,rec_type);
-      msfc.polResponse().put(row,polResponse);
-      msfc.position().put(row,position);
-      // fix these when incremental array building is ok.
-      // although for CARMA this would never change ....
-      msfc.receptorAngle().put(row,ra);
-      // msfc.receptorAngle().put(row,receptorAngle_p[arr](Slice(2*ant,2)));
+    if (corrType_p(0) >= Stokes::RR && corrType_p(numCorr-1) <= Stokes::LL) {
+	rec_type(0) = "R";
+	rec_type(1) = "L";
     }
-  }
+
+    if (corrType_p(0) >= Stokes::XX && corrType_p(numCorr-1) <= Stokes::YY) {
+	rec_type(0) = "X";
+	rec_type(1) = "Y";
+    }
+
+    Matrix<Complex> polResponse(2,2);
+    polResponse = 0.;
+    polResponse(0,0) = polResponse(1,1) = 1.;
+
+    Matrix<Double> offset(2,2);
+    offset = 0.;
+
+    Vector<Double> position(3);
+    position = 0.;
+
+    Vector<Double> ra(2);
+    ra = 0.0;
+
+    Int row = -1;
+
+    for (Int arr = 0; arr < (Int) nAnt_p.nelements (); arr++) {
+	for (Int ant = 0; ant < nAnt_p[arr]; ant++) {
+	    ms_p.feed ().addRow ();
+	    row++;
+
+	    msfc.antennaId ().put (row, ant);
+	    msfc.beamId ().put (row, -1);
+	    msfc.feedId ().put (row, 0);
+	    msfc.interval ().put (row, DBL_MAX);
+	    msfc.spectralWindowId ().put (row, -1);
+	    msfc.time ().put (row, 0.);
+	    msfc.numReceptors ().put (row, 2);
+	    msfc.beamOffset ().put (row, offset);
+	    msfc.polarizationType ().put (row, rec_type);
+	    msfc.polResponse ().put (row, polResponse);
+	    msfc.position ().put (row, position);
+	    msfc.receptorAngle ().put (row, ra);
+	}
+    }
 }
 
 
