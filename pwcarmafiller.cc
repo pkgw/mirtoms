@@ -73,7 +73,6 @@ typedef struct window {
     double sfreq[MAXWIN+MAXWIDE];    // frequency of first channel in window (doppler changes)
     double restfreq[MAXWIN+MAXWIDE]; // rest freq, if appropriate
     char   code[MAXWIN+MAXWIDE];     // code to CASA identification (N, W or S; S not used anymore)
-    int    keep[MAXWIN+MAXWIDE];     // keep this window for output to MS (0=false 1=true)
 
     int    nwide;                    // number of wide band channels
     float  wfreq[MAXWIDE];           // freq
@@ -578,9 +577,6 @@ CarmaFiller::fillMSMainTable (Int snumbase)
 	    // CASA "IF" is our "spectral window" concept.
 
 	    for (Int ifno = 0; ifno < win.nspect; ifno++) {
-		if (win.keep[ifno] == 0)
-		    continue;
-
 		// IFs go to separate rows in the MS, pol's do not!
 		ms_p.addRow ();
 		row++;
@@ -1269,7 +1265,6 @@ CarmaFiller::init_window_info ()
 
     for (int i = 0; i < nspect; i++) {
 	win.code[cidx] = 'N';
-	win.keep[cidx] = 1;
 	cidx++;
     }
 
@@ -1277,7 +1272,6 @@ CarmaFiller::init_window_info ()
 	Int side = win.sdf[i] < 0 ? -1 : 1;
 
 	win.code[cidx] = 'S';
-	win.keep[cidx] = 1;
 	win.ischan[cidx] = nchan + i + 1;
 	win.nschan[cidx] = 1;
 	win.sfreq[cidx] = win.wfreq[i];
