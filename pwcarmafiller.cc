@@ -115,7 +115,7 @@ private:
     MeasurementSet ms_p;
     MSColumns *msc_p;
     Int debug_level;
-    String telescope_name, project_p, object_p, telescope_p,
+    String telescope_name, project_name, object_p, telescope_p,
 	observer_name, timsys_p;
     Vector<Int> nPixel_p, corrType_p, corrIndex_p;
     Matrix<Int> corrProduct_p;
@@ -279,9 +279,9 @@ CarmaFiller::checkInput ()
 	uv_getdoubles ("restfreq", win.restfreq, win.nspect);
 
     if (uv_hasvar ("project"))
-	project_p = uv_getstr ("project");
+	project_name = uv_getstr ("project");
     else
-	project_p = "unknown";
+	project_name = "unknown";
 
     object_p = uv_getstr ("source");
     telescope_name = uv_getstr ("telescop");
@@ -425,42 +425,41 @@ CarmaFiller::setupMeasurementSet (const String& ms_path)
 }
 
 
-#define HISTLINE 8192
-void CarmaFiller::fillObsTables()
+void
+CarmaFiller::fillObsTables ()
 {
-  if (DEBUG(1)) cout << "CarmaFiller::fillObsTables" << endl;
+    ms_p.observation ().addRow ();
+    MSObservationColumns msObsCol (ms_p.observation ());
 
-  char hline[HISTLINE];
-  Int heof;
+    msObsCol.telescopeName ().put (0, telescope_name);
+    msObsCol.observer ().put (0, observer_name);
+    msObsCol.project ().put (0, project_name);
 
-  ms_p.observation().addRow();
-  MSObservationColumns msObsCol(ms_p.observation());
+    MSHistoryColumns msHisCol (ms_p.history ());
 
-  msObsCol.telescopeName ().put (0, telescope_name);
-  msObsCol.observer ().put (0, observer_name);
-  msObsCol.project().put(0,project_p);
+    Int row = 0;
+    char hline[8192]; // sigh, magic buffer sizes
 
-  MSHistoryColumns msHisCol(ms_p.history());
+    hisopen_c (uv_handle_p, "read");
 
-  String history;
-  Int row=-1;
-  hisopen_c(uv_handle_p,"read");
-  for (;;) {
-    hisread_c(uv_handle_p,hline,HISTLINE,&heof);
-    if (heof) break;
-    ms_p.history().addRow();
-    row++;
-    msHisCol.observationId().put(row,0);
-    //    msHisCol.time().put(row,time);    // fix the "2000/01/01/24:00:00" bug
-    //  nono, better file a report, it appears to be an aips++ problem
-    msHisCol.priority().put(row,"NORMAL");
-    msHisCol.origin().put(row,"CarmaFiller::fillObsTables");
-    msHisCol.application().put(row,"carmafiller");
-    Vector<String> clicmd (0);
-    msHisCol.cliCommand().put(row, clicmd);
-    msHisCol.message().put(row,hline);
-  }
-  hisclose_c(uv_handle_p);
+    while (1) {
+	int heof;
+
+	hisread_c (uv_handle_p, hline, sizeof (hline), &heof);
+	if (heof)
+	    break;
+
+	ms_p.history ().addRow ();
+	msHisCol.observationId ().put (row, 0);
+	msHisCol.priority ().put (row, "NORMAL");
+	msHisCol.origin ().put (row, "CarmaFiller::fillObsTables");
+	msHisCol.application ().put (row, "pwcarmafiller");
+	msHisCol.cliCommand ().put (row, Vector<String> (0));
+	msHisCol.message ().put (row, hline);
+	row++;
+    }
+
+    hisclose_c (uv_handle_p);
 }
 
 
