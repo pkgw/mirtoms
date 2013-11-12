@@ -979,50 +979,48 @@ CarmaFiller::fillFieldTable ()
 }
 
 
-void CarmaFiller::fillSourceTable()
+void
+CarmaFiller::fillSourceTable ()
 {
-  if (DEBUG(1)) cout << "CarmaFiller::fillSourceTable" << endl;
-  Int n = win.nspect;
-  Int ns = 0;
-  Int skip;
+    MSSourceColumns& msSource (msc_p->source ());
+    Int numsrc = 0;
+    Vector<Double> radec(2);
 
-  MSSourceColumns& msSource(msc_p->source());
+    for (uInt i = 0; i < source_p.nelements (); i++) {
+	uInt j;
 
-  Vector<Double> radec(2);
+	for (j = 0; j < i; j++)
+	    if (source_p[i] == source_p[j])
+		break;
 
-  for (uInt src=0; src < source_p.nelements(); src++) {
+	if (j < i)
+	    break; // duplicate source
 
-    skip = 0;                             // check not to duplicate source names
-    for (uInt i=0; i<src; i++) {
-      if (source_p[src] == source_p[i]) {
-	skip=1;
-	break;
-      }
+	numsrc++;
+	ms_p.source ().addRow ();
+
+	radec(0) = ras_p[i];
+	radec(1) = decs_p[i];
+
+	msSource.sourceId ().put (numsrc, numsrc);
+	msSource.name ().put (numsrc, source_p[i]);
+	// "FIX it due to a bug in MS2 code (6feb2001)":
+	msSource.spectralWindowId ().put (numsrc, 0);
+	msSource.direction ().put (numsrc, radec);
+
+	if (win.nspect > 0) {
+	    Vector<Double> restFreq(win.nspect);
+	    for (Int i = 0; i < win.nspect; i++)
+		restFreq(i) = win.restfreq[i] * 1e9;
+
+	    msSource.numLines ().put (numsrc, win.nspect);
+	    msSource.restFrequency ().put (numsrc, restFreq);
+	}
+
+	// valid at all times:
+	msSource.time ().put (numsrc, 0.0);
+	msSource.interval ().put (numsrc, 0);
     }
-    if (skip) break;
-
-    ns++;
-    ms_p.source().addRow();
-
-    radec(0) = ras_p[src];
-    radec(1) = decs_p[src];
-
-    msSource.sourceId().put(src,src);
-    msSource.name().put(src,source_p[src]);
-    msSource.spectralWindowId().put(src,0);     // FIX it due to a bug in MS2 code (6feb2001)
-    msSource.direction().put(src,radec);
-    if (n > 0) {
-      Int m=n;
-      Vector<Double> restFreq(m);
-      for (Int i=0; i<m; i++)
-	restFreq(i) = win.restfreq[i] * 1e9;    // convert from GHz to Hz
-
-      msSource.numLines().put(src,win.nspect);
-      msSource.restFrequency().put(src,restFreq);
-    }
-    msSource.time().put(src,0.0);               // valid for all times
-    msSource.interval().put(src,0);             // valid forever
-  }
 }
 
 
