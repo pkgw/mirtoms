@@ -362,7 +362,6 @@ CarmaFiller::setupMeasurementSet (const String& ms_path)
     SetupNewTable newtab (ms_path, td, Table::New);
     IncrementalStMan incrStMan ("ISMData");
     newtab.bindAll (incrStMan, True);
-    StandardStMan aipsStMan;
 
     Int tileSize = nchan_p / 10 + 1;
 
