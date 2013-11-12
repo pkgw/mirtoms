@@ -646,11 +646,10 @@ CarmaFiller::fillMSMainTable (Int snumbase)
 	}
     }
 
-    cout << infile_p << ": Processed " << recnum << " visibilities."
-	 << endl;
-    cout << "Found " << npoint << " pointings with "
-	 << nfield << " unique source/fields "
-	 << source_p.nelements() << " sources and "
+    cout << infile_p << ": " << recnum << " visibilities, "
+	 << npoint << " pointings, "
+	 << nfield << " unique source/fields, "
+	 << source_p.nelements() << " sources, "
 	 << num_arrays << " arrays."
 	 << endl;
 }
