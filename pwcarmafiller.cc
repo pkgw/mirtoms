@@ -18,9 +18,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with this program; if not, write to the Free Software
-// Foundation, Inc., 675 Masve, Cambridge, MA 02139, USA.
-//
-// $Id: carmafiller.cc,v 1.30 2010/06/23 18:14:08 pteuben Exp $
+// Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 
 
 #include <casa/aips.h>
@@ -156,7 +154,6 @@ private:
     float data[2*MAXCHAN], wdata[2*MAXCHAN];	// 2*MAXCHAN since (Re,Im) pairs complex numbers
     int flags[MAXCHAN], wflags[MAXCHAN];
     float systemp[MAXANT*MAXWIDE];
-    int zero_tsys;
     int nvis;
 };
 
@@ -169,7 +166,6 @@ CarmaFiller::CarmaFiller (String& infile, Int debug_level, Bool apply_tsys)
     npoint = 0;
     this->debug_level = debug_level;
     this->apply_tsys = apply_tsys;
-    zero_tsys = 0;
 
     if (sizeof (double) != sizeof (Double))
 	cout << "Double != double; carmafiller will probably fail" << endl;
@@ -646,10 +642,9 @@ CarmaFiller::fillMSMainTable (Int snumbase)
 		if (apply_tsys) {
 		    w2 = 1.0; // "i use this as a 'version' id  to test FC refresh bugs :-)"
 
-		    if (systemp[ant1] == 0 || systemp[ant2] == 0) {
-			zero_tsys++;
+		    if (systemp[ant1] == 0 || systemp[ant2] == 0)
 			w1 = 0.0;
-		    } else
+		    else
 			w1 = 1.0 / sqrt ((double) (systemp[ant1] * systemp[ant2]));
 
 		    msc.weight ().put (row, w1);
@@ -673,9 +668,9 @@ CarmaFiller::fillMSMainTable (Int snumbase)
     cout << infile_p << ": Processed " << recnum << " visibilities."
 	 << endl;
     cout << "Found " << npoint << " pointings with "
-	 <<  nfield << " unique source/fields "
-	 <<  source_p.nelements() << " sources and "
-	 <<  num_arrays << " arrays."
+	 << nfield << " unique source/fields "
+	 << source_p.nelements() << " sources and "
+	 << num_arrays << " arrays."
 	 << endl;
 }
 
@@ -1313,11 +1308,11 @@ main (int argc, char **argv)
     try {
 	Input inp (1);
 	inp.version ("");
-	inp.create ("vis",     "",        "Name of CARMA dataset name",         "string");
-	inp.create ("ms",      "",        "Name of MeasurementSet",             "string");
-	inp.create ("tsys",    "False",   "Fill WEIGHT from Tsys in data?",     "bool");
-	inp.create ("snumbase","0",       "Starting SCAN_NUMBER value",         "int");
-	inp.create ("polmode", "0",       "(deprecated; ignored)",              "int");
+	inp.create ("vis", "", "Name of CARMA dataset name", "string");
+	inp.create ("ms", "", "Name of MeasurementSet", "string");
+	inp.create ("tsys", "False", "Fill WEIGHT from Tsys in data?", "bool");
+	inp.create ("snumbase", "0", "Starting SCAN_NUMBER value", "int");
+	inp.create ("polmode", "0", "(deprecated; ignored)", "int");
 	inp.readArguments (argc, argv);
 
 	String vis (inp.getString ("vis"));
