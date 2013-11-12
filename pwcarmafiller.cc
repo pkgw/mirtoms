@@ -918,68 +918,64 @@ CarmaFiller::fillSpectralWindowTable ()
 }
 
 
-void CarmaFiller::fillFieldTable()
+void
+CarmaFiller::fillFieldTable ()
 {
-  if (DEBUG(1)) cout << "CarmaFiller::fillFieldTable" << endl;
+    msc_p->setDirectionRef (epochRef_p);
 
-  msc_p->setDirectionRef(epochRef_p);
+    MSFieldColumns& msField (msc_p->field ());
 
-  MSFieldColumns& msField(msc_p->field());
+    Vector<Double> radec(2), pm(2);
+    Vector<MDirection> radecMeas(1);
+    Double cosdec;
 
-  Vector<Double> radec(2), pm(2);
-  Vector<MDirection> radecMeas(1);
-  Int fld;
-  Double cosdec;
+    pm = 0; // We don't store proper motion.
 
-  pm = 0;                       // Proper motion is zero
-
-  if (nfield == 0) {            // if no pointings found, say there is 1
-      WARN ("no dra/ddec pointings found; creating one");
-    nfield = npoint = 1;
-    dra[0] = ddec[0] = 0.0;
-  }
-
-  for (fld = 0; fld < nfield; fld++) {
-    int sid = sid_p[fld];
-
-    ms_p.field().addRow();
-
-    if (DEBUG(1))
-      cout << "FLD: " << fld << " " << sid << " " << source_p[field[fld]] << endl;
-
-    if (sid > 0) {
-      msField.sourceId().put(fld,sid-1);
-      msField.name().put(fld,source_p[field[fld]]);        // this is the source name
-    } else {
-      // a special test where the central source gets _C appended to the source name
-      msField.sourceId().put(fld,-sid-1);
-      msField.name().put(fld,source_p[field[fld]]);        // or keep them all same name
+    if (nfield == 0) {
+	// if no pointings found, say there is 1
+	WARN ("no dra/ddec pointings found; creating one");
+	nfield = npoint = 1;
+	dra[0] = ddec[0] = 0.0;
     }
 
-    msField.code().put(fld,purpose_p[field[fld]]);
+    for (Int fld = 0; fld < nfield; fld++) {
+	int sid = sid_p[fld];
 
-    msField.numPoly().put(fld,0);
+	ms_p.field ().addRow ();
 
-    cosdec = cos(dec[fld]);
-    radec(0) = ra[fld]  + dra[fld]/cosdec;           // RA, in radians
-    radec(1) = dec[fld] + ddec[fld];                 // DEC, in radians
+	if (sid > 0) {
+	    msField.sourceId ().put (fld, sid - 1);
+	    msField.name ().put (fld, source_p[field[fld]]);
+	} else {
+	    // "a special test where the central source gets _C appended to the source name"
+	    msField.sourceId ().put (fld, -sid - 1);
+	    // "or keep them all same name"
+	    msField.name ().put (fld, source_p[field[fld]]);
+	}
 
-    radecMeas(0).set(MVDirection(radec(0), radec(1)), MDirection::Ref(epochRef_p));
+	msField.code ().put (fld, purpose_p[field[fld]]);
 
-    msField.delayDirMeasCol().put(fld,radecMeas);
-    msField.phaseDirMeasCol().put(fld,radecMeas);
-    msField.referenceDirMeasCol().put(fld,radecMeas);
+	msField.numPoly ().put(fld, 0);
 
-    // Need to convert epoch in years to MJD time
-    if (nearAbs(epoch_p,2000.0,0.01)) {
-      msField.time().put(fld, MeasData::MJD2000*C::day);
-      // assume UTC epoch
-    } else if (nearAbs(epoch_p,1950.0,0.01)) {
-      msField.time().put(fld, MeasData::MJDB1950*C::day);
-    } else {
-      cerr << " Cannot handle epoch "<< epoch_p <<endl;
+	cosdec = cos (dec[fld]);
+	radec(0) = ra[fld] + dra[fld] / cosdec;
+	radec(1) = dec[fld] + ddec[fld];
+
+	radecMeas (0).set (MVDirection (radec(0), radec(1)), MDirection::Ref (epochRef_p));
+
+	msField.delayDirMeasCol ().put (fld, radecMeas);
+	msField.phaseDirMeasCol ().put (fld, radecMeas);
+	msField.referenceDirMeasCol ().put (fld, radecMeas);
+
+	// Need to convert epoch in years to MJD time. We're assuming UTC here
+	// (and TAI elsewhere!)
+	if (nearAbs (epoch_p, 2000.0, 0.01))
+	    msField.time ().put (fld, MeasData::MJD2000 * C::day);
+	else if (nearAbs (epoch_p, 1950.0, 0.01))
+	    msField.time ().put (fld, MeasData::MJDB1950 * C::day);
+	else
+	    WARN ("cannot handle epoch " << epoch_p);
     }
-  }
 }
 
 
