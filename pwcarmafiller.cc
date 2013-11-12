@@ -121,7 +121,7 @@ private:
     Matrix<Int> corrProduct_p;
     Double epoch_p;
     MDirection::Types epochRef_p;
-    Int nArray_p;
+    Int num_arrays;
     Block<Int> nAnt_p;
     Block<Vector<Double> > receptorAngle_p;
     Vector<Double> arrayXYZ_p; // 3 elements
@@ -163,7 +163,7 @@ private:
 CarmaFiller::CarmaFiller (String& infile, Int debug_level, Bool apply_tsys)
 {
     infile_p = infile;
-    nArray_p = 0;
+    num_arrays = 0;
     nfield = 0;
     npoint = 0;
     this->debug_level = debug_level;
@@ -532,8 +532,8 @@ CarmaFiller::fillMSMainTable (Int snumbase)
 		Tracking (recnum); // something important changed.
 
 	    // CARMA stuff for different "arrays" in the MS
-	    nAnt_p[nArray_p-1] = max (nAnt_p[nArray_p-1], ant1);
-	    nAnt_p[nArray_p-1] = max (nAnt_p[nArray_p-1], ant2);
+	    nAnt_p[num_arrays-1] = max (nAnt_p[num_arrays-1], ant1);
+	    nAnt_p[num_arrays-1] = max (nAnt_p[num_arrays-1], ant2);
 
 	    // change antenna numbering convention from MIRIAD to CASA.
 	    ant1--;
@@ -655,7 +655,7 @@ CarmaFiller::fillMSMainTable (Int snumbase)
 		}
 
 		msc.uvw ().put (row, uvw);
-		msc.arrayId ().put (row, nArray_p - 1);
+		msc.arrayId ().put (row, num_arrays - 1);
 		msc.dataDescId ().put (row, ifno);
 		msc.fieldId ().put (row, ifield);
 
@@ -673,135 +673,128 @@ CarmaFiller::fillMSMainTable (Int snumbase)
     cout << "Found " << npoint << " pointings with "
 	 <<  nfield << " unique source/fields "
 	 <<  source_p.nelements() << " sources and "
-	 <<  nArray_p << " arrays."
+	 <<  num_arrays << " arrays."
 	 << endl;
 }
 
 
-void CarmaFiller::fillAntennaTable()
+void
+CarmaFiller::fillAntennaTable ()
 {
-  if (DEBUG(1)) cout << "CarmaFiller::fillAntennaTable" << endl;
-  Int nAnt=nants_p;
+    // TODO: much of this should be tabulated, or preferably not hardcoded at all ...
+    arrayXYZ_p.resize (3);
 
-  arrayXYZ_p.resize(3);
-  if (telescope_name == "HATCREEK" || telescope_name == "BIMA") {     // Array center:
-    arrayXYZ_p(0) = -2523862.04;
-    arrayXYZ_p(1) = -4123592.80;
-    arrayXYZ_p(2) =  4147750.37;
-  } else if (telescope_name == "ATA") {
-      // ie same as hatcreek / bima -- correct ?????
-    arrayXYZ_p(0) = -2523862.04;
-    arrayXYZ_p(1) = -4123592.80;
-    arrayXYZ_p(2) =  4147750.37;
-  } else if (telescope_name == "ATCA") {
-    arrayXYZ_p(0) = -4750915.84;
-    arrayXYZ_p(1) =  2792906.18;
-    arrayXYZ_p(2) = -3200483.75;
-  } else if (telescope_name == "OVRO" || telescope_name == "CARMA") {
-    arrayXYZ_p(0) = -2397389.65197;
-    arrayXYZ_p(1) = -4482068.56252;
-    arrayXYZ_p(2) =  3843528.41479;
-  } else {
-      WARN ("no hardcoded array position available for name " << telescope_name);
-      arrayXYZ_p = 0.0;
-  }
-  if(DEBUG(3)) cout << "number of antennas ="<<nAnt<<endl;
-  if(DEBUG(3)) cout << "array ref pos:"<<arrayXYZ_p<<endl;
-
-  String timsys = "TAI";  // assume, for now ....
-
-  // store the time keywords ; again, miriad doesn't have this (yet)
-  // check w/ uvfitsfiller again
-
-  //save value to set time reference frame elsewhere
-  timsys_p=timsys;
-
-  // Antenna diamater:
-  // Should check the 'antdiam' UV variable, but it doesn't appear to
-  // exist in our CARMA datasets.
-  // So, fill in some likely values
-  Float diameter=25;                        //# most common size (:-)
-  if (telescope_name=="ATCA")     diameter=22;     //# only at 'low' freq !!
-  if (telescope_name=="HATCREEK") diameter=6;
-  if (telescope_name=="BIMA")     diameter=6;
-  if (telescope_name=="ATA")      diameter=6.1;
-  if (telescope_name=="CARMA")    diameter=8;
-  if (telescope_name=="OVRO")     diameter=10;
-
-  if (nAnt == 15 && telescope_name=="OVRO") {
-    cout << "CARMA array (6 OVRO, 9 BIMA) assumed" << endl;
-    telescope_name = "CARMA";
-  } else  if (nAnt == 23 && telescope_name=="OVRO") {
-    cout << "CARMA array (6 OVRO, 9 BIMA, 8 SZA) assumed" << endl;
-    telescope_name = "CARMA";
-  }
-
-  Matrix<Double> posRot = Rot3D (2, longitude);
-
-  MSAntennaColumns& ant(msc_p->antenna());
-  Vector<Double> antXYZ(3);
-
-  // add antenna info to table
-  if (nArray_p == 0) {                   // check if needed
-    ant.setPositionRef(MPosition::ITRF);
-    //ant.setPositionRef(MPosition::WGS84);
-  }
-  Int row=ms_p.antenna().nrow()-1;
-
-  if (DEBUG(2)) cout << "CarmaFiller::fillAntennaTable row=" << row+1
-       << " array " << nArray_p+1 << endl;
-
-  for (Int i=0; i<nAnt; i++) {
-
-    ms_p.antenna().addRow();
-    row++;
-
-    ant.dishDiameter().put(row, diameter);
-
-    antXYZ(0) = antpos[i];              //# these are now in nano-sec
-    antXYZ(1) = antpos[i+nAnt];
-    antXYZ(2) = antpos[i+nAnt*2];
-    antXYZ *= 1e-9 * C::c;;             //# and now in meters
-    if (DEBUG(2)) cout << "Ant " << i+1 << ":" << antXYZ << " (m)." << endl;
-
-    String mount;                           // really should consult
-    switch (mount_p) {                 	    // the "mount" uv-variable
-      case  0: mount="ALT-AZ";      break;
-      case  1: mount="EQUATORIAL";  break;
-      case  2: mount="X-Y";         break;
-      case  3: mount="ORBITING";    break;
-      case  4: mount="BIZARRE";     break;
-      // case  5: mount="SPACE-HALCA"; break;
-      default: mount="UNKNOWN";     break;
+    if (telescope_name == "HATCREEK" || telescope_name == "BIMA") {
+	arrayXYZ_p(0) = -2523862.04;
+	arrayXYZ_p(1) = -4123592.80;
+	arrayXYZ_p(2) =  4147750.37;
+    } else if (telescope_name == "ATA") {
+	// XXX: not 100% sure that this should be identical to HATCREEK/BIMA.
+	arrayXYZ_p(0) = -2523862.04;
+	arrayXYZ_p(1) = -4123592.80;
+	arrayXYZ_p(2) =  4147750.37;
+    } else if (telescope_name == "ATCA") {
+	arrayXYZ_p(0) = -4750915.84;
+	arrayXYZ_p(1) =  2792906.18;
+	arrayXYZ_p(2) = -3200483.75;
+    } else if (telescope_name == "OVRO" || telescope_name == "CARMA") {
+	arrayXYZ_p(0) = -2397389.65197;
+	arrayXYZ_p(1) = -4482068.56252;
+	arrayXYZ_p(2) =  3843528.41479;
+    } else {
+	WARN ("no hardcoded array position available for name " << telescope_name);
+	WARN ("assumed center of zero is grievously wrong");
+	arrayXYZ_p = 0.0;
     }
-    ant.mount().put(row,mount);
-    ant.flagRow().put(row,False);
-    ant.name().put(row,String::toString(i+1));
-    ant.station().put(row,"ANT" + String::toString(i+1));
-    ant.type().put(row,"GROUND-BASED");
 
-    Vector<Double> offsets(3);
-    offsets=0.0;
-    // store absolute positions, with all offsets 0
+    String timsys = "TAI"; // hardcoded for now.
+    timsys_p = timsys;
 
-    antXYZ = product(posRot,antXYZ);
-    ant.position().put(row, antXYZ + arrayXYZ_p);
-    ant.offset().put(row,offsets);
-  }
+    // Should use antdiam if available ...
 
-  nArray_p++;
-  nAnt_p.resize(nArray_p);
-  nAnt_p[nArray_p-1] = 0;
-  if (DEBUG(3) && nArray_p > 1)
-    cout << "DEBUG0 :: " << nAnt_p[nArray_p-2] << endl;
+    Float diameter = 25;
+    if (telescope_name == "ATCA")
+	diameter = 22;
+    else if (telescope_name == "HATCREEK")
+	diameter = 6;
+    else if (telescope_name == "BIMA")
+	diameter = 6;
+    else if (telescope_name == "ATA")
+	diameter = 6.1;
+    else if (telescope_name == "CARMA")
+	diameter = 8;
+    else if (telescope_name == "OVRO")
+	diameter = 10;
+    else
+	WARN ("no hardcoded antenna diameter for " << telescope_name <<
+	      "; assuming " << diameter);
 
-  if (nArray_p > 1) return;
+    if (nants_p == 15 && telescope_name == "OVRO") {
+	WARN ("assuming CARMA-15 array (6 OVRO, 9 BIMA)");
+	telescope_name = "CARMA";
+    } else if (nants_p == 23 && telescope_name == "OVRO") {
+	WARN ("assuming CARMA-23 array (6 OVRO, 9 BIMA, 8 SZA)");
+	telescope_name = "CARMA";
+    }
 
-  // now do some things which only need to happen the first time around
+    Matrix<Double> posRot = Rot3D (2, longitude);
 
-  // store these items in non-standard keywords for now
-  ant.name ().rwKeywordSet ().define ("ARRAY_NAME", telescope_name);
-  ant.position().rwKeywordSet().define("ARRAY_POSITION",arrayXYZ_p);
+    MSAntennaColumns& ant (msc_p->antenna ());
+    Vector<Double> antXYZ(3);
+
+    if (num_arrays == 0)
+	ant.setPositionRef (MPosition::ITRF);
+
+    Int row = ms_p.antenna ().nrow () - 1;
+
+    for (Int i = 0; i < nants_p; i++) {
+	ms_p.antenna().addRow ();
+	row++;
+
+	ant.dishDiameter ().put (row, diameter);
+
+	antXYZ(0) = antpos[i];
+	antXYZ(1) = antpos[i + nants_p];
+	antXYZ(2) = antpos[i + nants_p * 2];
+	antXYZ *= 1e-9 * C::c; // ns -> m
+
+	// should track the "mount" UV variable
+	String mount;
+	switch (mount_p) {
+	case 0: mount = "ALT-AZ"; break;
+	case 1: mount = "EQUATORIAL"; break;
+	case 2: mount = "X-Y"; break;
+	case 3: mount = "ORBITING"; break;
+	case 4: mount = "BIZARRE"; break;
+	default: mount = "UNKNOWN"; break;
+	}
+
+	ant.mount ().put (row, mount);
+	ant.flagRow ().put (row, False);
+	ant.name ().put (row, String::toString (i+1));
+	ant.station ().put (row, "ANT" + String::toString (i+1));
+	ant.type ().put (row, "GROUND-BASED");
+
+	// Store absolute positions, with all offsets 0
+
+	Vector<Double> offsets (3);
+	offsets = 0.;
+	antXYZ = product (posRot, antXYZ);
+	ant.position ().put (row, antXYZ + arrayXYZ_p);
+	ant.offset ().put (row, offsets);
+    }
+
+    num_arrays++;
+    nAnt_p.resize (num_arrays);
+    nAnt_p[num_arrays - 1] = 0;
+
+    if (num_arrays > 1)
+	return;
+
+    // now do some things which only need to happen the first time around
+    // store these items in non-standard keywords for now
+    ant.name ().rwKeywordSet ().define ("ARRAY_NAME", telescope_name);
+    ant.position ().rwKeywordSet ().define ("ARRAY_POSITION", arrayXYZ_p);
 }
 
 
@@ -1188,7 +1181,7 @@ void CarmaFiller::Tracking(int record)
       uv_getdoubles ("antpos", antpos, 3 * nants_p);
     if (DEBUG(2)) {
       cout << "Found " << nants_p << " antennas for array "
-	   << nArray_p << endl;
+	   << num_arrays << endl;
       for (int i=0; i<nants_p; i++) {
         cout << antpos[i] << " " <<
                 antpos[i+nants_p] << " " <<
