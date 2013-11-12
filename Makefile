@@ -1,5 +1,5 @@
 MIR=/a
-CASACORE=/a/meqtrees
+CASACORE=/a/casa/local
 prefix=/a
 
 CXXFLAGS = -Wall -g -O0 -I$(MIR)/include -I$(CASACORE)/include/casacore
