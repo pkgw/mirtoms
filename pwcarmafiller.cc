@@ -89,7 +89,7 @@ public:
     void checkInput ();
     void setupMeasurementSet (const String& ms_path);
     void fillObsTables ();
-    void fillMSMainTable (Bool scan, Int snumbase);
+    void fillMSMainTable (Int snumbase);
     void fillAntennaTable ();
     void fillSyscalTable ();
     void fillSpectralWindowTable ();
@@ -135,7 +135,7 @@ private:
     float dra[MAXFIELD], ddec[MAXFIELD];       // offset in radians
     double ra[MAXFIELD], dec[MAXFIELD];
     int field[MAXFIELD];                     // source index
-    int fcount[MAXFIELD], sid_p[MAXFIELD];
+    int sid_p[MAXFIELD];
     float dra_p, ddec_p;
     int pol_p;
 
@@ -169,9 +169,6 @@ CarmaFiller::CarmaFiller (String& infile, Int debug_level, Bool apply_tsys)
     this->debug_level = debug_level;
     this->apply_tsys = apply_tsys;
     zero_tsys = 0;
-
-    for (int i = 0; i < MAXFIELD; i++)
-	fcount[i] = 0;
 
     if (sizeof (double) != sizeof (Double))
 	cout << "Double != double; carmafiller will probably fail" << endl;
@@ -412,7 +409,7 @@ CarmaFiller::setupMeasurementSet (const String& ms_path)
 
     ms.initRefs(); // update the references to the subtable keywords
 
-    { 
+    {
 	// Set the TableInfo. I'm assuming that the braces are to trigger a destructor.
 	TableInfo& info (ms.tableInfo ());
 	info.setType (TableInfo::type (TableInfo::MEASUREMENTSET));
@@ -463,282 +460,221 @@ CarmaFiller::fillObsTables ()
 }
 
 
-void CarmaFiller::fillMSMainTable(Bool scan, Int snumbase)
+void
+CarmaFiller::fillMSMainTable (Int snumbase)
 {
-  if (DEBUG(1)) cout << "CarmaFiller::fillMSMainTable" << endl;
+    MSColumns& msc (*msc_p);
+    Int nCorr = npol_p;
+    Int nChan = nchan_p;
+    Int nCat  = 3; // number of flagging categories
+    Int iscan = snumbase;
+    Int ifield_old;
 
-  MSColumns& msc(*msc_p);           // Get access to the MS columns, new way
-  Int nCorr = npol_p;               // # stokes
-  Int nChan = nchan_p;              // # channels to be written
-  Int nCat  = 3;                    // # initial flagging categories (fixed at 3)
-  Int iscan = snumbase;
-  Int ifield_old;
+    Matrix<Complex> vis (nCorr, nChan);
+    Vector<Float>   sigma (nCorr);
+    Vector<String>  cat (nCat);
+    cat(0) = "FLAG_CMD";
+    cat(1) = "ORIGINAL";
+    cat(2) = "USER";
+    msc.flagCategory ().rwKeywordSet ().define ("CATEGORY", cat);
+    Cube<Bool> flagCat (nCorr, nChan, nCat, False);
+    Matrix<Bool> flag = flagCat.xyPlane (0); // references flagCat's storage
+    Vector<Float> w1 (nCorr), w2 (nCorr);
 
-  Matrix<Complex> vis(nCorr,nChan);
-  Vector<Float>   sigma(nCorr);
-  Vector<String>  cat(nCat);
-  cat(0)="FLAG_CMD";
-  cat(1)="ORIGINAL";
-  cat(2)="USER";
-  msc.flagCategory().rwKeywordSet().define("CATEGORY",cat);
-  Cube<Bool> flagCat(nCorr,nChan,nCat,False);
-  Matrix<Bool> flag = flagCat.xyPlane(0); // references flagCat's storage
-  Vector<Float> w1(nCorr), w2(nCorr);
+    uvrewind_c (uv_handle_p); // may not be necessary anymore? Can't hurt ...
 
-  uvrewind_c(uv_handle_p);
+    nAnt_p.resize (1);
+    nAnt_p[0] = 0;
 
-  nAnt_p.resize(1);
-  nAnt_p[0]=0;
+    receptorAngle_p.resize (1);
+    Int recnum, row = -1;
+    int polsleft = 0;
+    Double interval;
+    Bool lastRowFlag = False;
+    int nread, nwread;
+    Int ant1, ant2;
+    Double time;
+    Vector<Double> uvw (3);
 
-  receptorAngle_p.resize(1);
-  Int group, row=-1;
-  int polsleft = 0;
-  Double interval;
-  Bool lastRowFlag = False;
+    for (recnum = 0; ; recnum++) {
+	uvread_c (uv_handle_p, preamble, data, flags, MAXCHAN, &nread);
+	if (nread <= 0)
+	    break;
 
-  if (DEBUG(1))
-      cout << "Writing " << win.nspect << " spectral windows" << endl;
+	if (win.nspect > 0)
+	    uvwread_c (uv_handle_p, wdata, wflags, MAXCHAN, &nwread);
+	else
+	    nwread = 0;
 
-  int nread, nwread;
-  Int ant1, ant2;
-  Float baseline;
-  Double time;
-  Vector<Double> uvw(3);
+	if (nread != nchan_p)
+	    throw AipsError ("cannot handle nchan changing from " + String (nchan_p) +
+			     " to " + String (nread));
 
-  for (group=0; ; group++) {        // loop forever until end-of-file
-    uvread_c(uv_handle_p, preamble, data, flags, MAXCHAN, &nread);
-    // cout << "UVREAD: " << data[0] << " " << data[1] << endl;
-    if (nread <= 0) break;          // done with reading miriad data
+	if (nwread != nwide_p)
+	    throw AipsError ("cannot handle nwide changing from " + String (nwide_p) +
+			     " to " + String (nwread));
 
-    if (DEBUG(9)) cout << "UVREAD: " << nread << endl;
-    if (win.nspect > 0)
-	uvwread_c(uv_handle_p, wdata, wflags, MAXCHAN, &nwread);
-    else
-        nwread=0;
+	if (polsleft == 0) {
+	    // starting a new simultaneous polarization record
+	    uvrdvr_c (uv_handle_p, H_INT, "npol", (char *) &polsleft, NULL, 1);
 
-    if (nread != nchan_p) {     // big trouble: data width has changed
-      cout << "### Error: Narrow Channel changing from " << nchan_p <<
-              " to " << nread << endl;
-      break;                    // bail out for now
-    }
-    if (nwread != nwide_p) {     // big trouble: data width has changed
-      cout << "### Error: Wide Channel changing from " << nwide_p <<
-              " to " << nwread << endl;
-      break;                    // bail out for now
-    }
+	    int baseline = (int) preamble[4];
+	    // XXX: we're not handling the MIRIAD >256-ant convention
+	    ant1 = baseline / 256;
+	    ant2 = baseline - ant1 * 256;
 
-    if (polsleft == 0) {
-	// starting a new simultaneous polarization record
-	uvrdvr_c (uv_handle_p, H_INT, "npol", (char *) &polsleft, NULL, 1);
+	    // get time in MJD seconds ; input was in JD
+	    time = (preamble[3] - 2400000.5) * C::day;
+	    time_p = time;
+	    interval = inttime_p;
 
-	baseline = preamble[4];
-	ant1 = Int(baseline)/256;              // baseline = 256*A1 + A2
-	ant2 = Int(baseline) - ant1*256;       // mostly A1 <= A2
+	    if (uvupdate_c (uv_handle_p))
+		Tracking (recnum); // something important changed.
 
-	// get time in MJD seconds ; input was in JD
-	time = (preamble[3] - 2400000.5) * C::day;
-	time_p = time;
+	    // CARMA stuff for different "arrays" in the MS
+	    nAnt_p[nArray_p-1] = max (nAnt_p[nArray_p-1], ant1);
+	    nAnt_p[nArray_p-1] = max (nAnt_p[nArray_p-1], ant2);
 
-	if (DEBUG(3)) {                 // timeline monitoring...
-	    static Double time0 = -1.0;
-	    static Double dt0 = -1.0;
+	    // change antenna numbering convention from MIRIAD to CASA.
+	    ant1--;
+	    ant2--;
 
-	    MVTime mjd_date(time/C::day);
-	    mjd_date.setFormat(MVTime::FITS);
-	    cout << "DATE=" << mjd_date ;
-	    if (time0 > 0) {
-		if (time - time0 < 0) {
-		    cout << " BACKWARDS";
-		    dt0 = time - time0;
-		}
-	    }
-	    if (dt0 > 0) {
-		if ( (time-time0) > 5*dt0) {
-		    cout << " FORWARDS";
-		    dt0 = time - time0;
-		}
-	    } else
-		dt0 = time-time0;
-	    time0 = time;
-	    cout << endl;
-	} // DEBUG(3) for timeline monitoring
+	    // convert ns -> m and to CASA/AIPS sign convention
+	    uvw(0) = preamble[0];
+	    uvw(1) = preamble[1];
+	    uvw(2) = preamble[2];
+	    uvw *= -1e-9 * C::c;
 
-	interval = inttime_p;
-
-	// for MIRIAD, this would always cause a single array dataset,
-	// but we need to count the antpos occurences to find out
-	// which array configuration we're in.
-
-	if (uvupdate_c(uv_handle_p)) {       // aha, something important changed
-	    if (DEBUG(4)) {
-		cout << "Record " << group+1 << " uvupdate" << endl;
-	    }
-	    Tracking(group);
-	} else {
-	    if (DEBUG(5)) cout << "Record " << group << endl;
+	    flag = 1; // clear all, in case current npol != nCorr
+	    vis = 0;
 	}
 
-	//  nAnt_p.resize(array+1);
-	//  receptorAngle_p.resize(array+1);
+	int mirpol;
+	Int casapolidx;
+	uvrdvr_c (uv_handle_p, H_INT, "pol", (char *) &mirpol, NULL, 1);
+	casapolidx = polmapping(mirpol + 8);
 
-	nAnt_p[nArray_p-1] = max(nAnt_p[nArray_p-1],ant1);   // for MIRIAD, and also
-	nAnt_p[nArray_p-1] = max(nAnt_p[nArray_p-1],ant2);
-	ant1--; ant2--;                                      // make them 0-based for CASA
+	if (casapolidx < 0)
+	    throw AipsError ("unexpected MIRIAD polarization " + mirpol);
 
-	// should ant1 and ant2 be offset with (nArray_p-1)*nant_p ???
-	// in case there are multiple arrays???
-	// TODO: code should just assuming single array
+	Int count = 0;
 
-	uvw(0) = -preamble[0] * 1e-9; // convert to seconds
-	uvw(1) = -preamble[1] * 1e-9; // MIRIAD uses nanosec
-	uvw(2) = -preamble[2] * 1e-9; // note - sign (CASA vs. MIRIAD convention)
-	uvw   *= C::c;                // Finally convert to meters for CASA
+	for (Int chan = 0; chan < nChan; chan++) {
+	    // MIRIAD uses ant1->ant2; FITS/AIPS/CASA use ant2->ant1
+	    // Along with negating UVW, we need to conjugate the visibility.
+	    Bool visFlag = (flags[count/2] == 0) ? False : True;
+	    Float visReal = +data[count]; count++;
+	    Float visImag = -data[count]; count++;
+	    Float wt = 1.0;
 
-	if (group==0 && DEBUG(1)) {
-	    cout << "### First record: " << endl;
-	    cout << "### Preamble: " << preamble[0] << " " <<
-		preamble[1] << " " <<
-		preamble[2] << " nanosec.(MIRIAD convention)" << endl;
-	    cout << "### uvw: " << uvw(0) << " " <<
-		uvw(1) << " " <<
-		uvw(2) << " meter. (CASA convention)" << endl;
+	    if (!visFlag)
+		wt = -wt;
+
+	    flag(casapolidx,chan) = (wt <= 0);
+	    vis(casapolidx,chan) = Complex (visReal, visImag);
 	}
 
-	flag = 1; // clear all, in case current npol != nCorr
-	vis = 0;
-    }
+	polsleft--;
 
-    int mirpol;
-    Int casapolidx;
-    uvrdvr_c (uv_handle_p, H_INT, "pol", (char *) &mirpol, NULL, 1);
-    casapolidx = polmapping (mirpol + 8);
+	if (polsleft == 0 && !allTrue (flag)) {
+	    // Done with this set of simultaneous pols, and not all flagged.
+	    // CASA "IF" is our "spectral window" concept.
 
-    if (casapolidx < 0)
-	throw AipsError ("unexpected MIRIAD polarization " + mirpol);
+	    for (Int ifno = 0; ifno < win.nspect; ifno++) {
+		if (win.keep[ifno] == 0)
+		    continue;
 
-    // first construct the data (vis & flag) in a single long array
-    // containing all spectral windows
-    // In the (optional) loop over all spectral windows, subsets of
-    // these arrays will be written out
+		// IFs go to separate rows in the MS, pol's do not!
+		ms_p.addRow ();
+		row++;
 
-    Int count = 0;                // index into data[] array
+		if (row == 0) {
+		    // first fill in values for all the unused columns
+		    ifield_old = ifield;
+		    msc.feed1 ().put (row, 0);
+		    msc.feed2 ().put (row, 0);
+		    msc.flagRow ().put (row, False);
+		    lastRowFlag = False;
+		    msc.scanNumber ().put (row, iscan);
+		    msc.processorId ().put (row, -1);
+		    msc.observationId ().put (row, 0);
+		    msc.stateId ().put (row, -1);
 
-    for (Int chan=0; chan<nChan; chan++) {
-	// miriad uses bl=ant1-ant2, FITS/AIPS/CASA use bl=ant2-ant1
-	// apart from using -(UVW)'s, the visib need to be conjugated as well
-	Bool  visFlag =  (flags[count/2] == 0) ? False : True;
-	Float visReal = +data[count]; count++;
-	Float visImag = -data[count]; count++;
-	Float wt = 1.0;
-	if (!visFlag) wt = -wt;
+		    if (!apply_tsys) {
+			Vector<Float> tmp (nCorr);
+			tmp = 1.0;
+			msc.weight ().put (row, tmp);
+			msc.sigma ().put (row, tmp);
+		    }
+		}
 
-	// check flags array !! need separate counter (count/2)
+		msc.exposure ().put (row, interval);
+		msc.interval ().put (row, interval);
 
-	flag(casapolidx,chan) = (wt<=0);
-	vis(casapolidx,chan) = Complex(visReal,visImag);
-    } // chan
+		// Copying all of the data!
 
-    polsleft--;
+		Matrix<Complex> tvis (nCorr, win.nschan[ifno]);
+		Cube<Bool> tflagCat (nCorr, win.nschan[ifno], nCat, False);
+		Matrix<Bool> tflag = tflagCat.xyPlane (0); // references flagCat's storage
 
-    if (polsleft == 0 && !allTrue (flag)) {
-	// done with this set of simultaneous pols, and not all flagged.
+		Int woffset = win.ischan[ifno] - 1;
+		Int wsize = win.nschan[ifno];
+		for (int j = 0; j < nCorr; j++) {
+		    for (Int i = 0; i < wsize; i++) {
+			tvis(j,i) = vis(j,i+woffset);
+			tflag(j,i) = flag(j,i+woffset);
+		    }
+		}
 
-	for (Int ifno=0; ifno < win.nspect; ifno++) {
-	    if (win.keep[ifno]==0) continue;
-	    // IFs go to separate rows in the MS, pol's do not!
-	    ms_p.addRow();
-	    row++;
+		msc.data ().put(row, tvis);
+		msc.flag ().put(row, tflag);
+		msc.flagCategory ().put (row, tflagCat);
 
-	    // first fill in values for all the unused columns
-	    if (row==0) {
+		Bool rowFlag = allEQ (flag, True);
+		if (rowFlag != lastRowFlag) {
+		    msc.flagRow ().put (row, rowFlag);
+		    lastRowFlag = rowFlag;
+		}
+
+		msc.antenna1 ().put (row, ant1);
+		msc.antenna2 ().put (row, ant2);
+		msc.time ().put (row, time); // note: CARMA timing convention changed in 2009
+		msc.timeCentroid ().put (row, time);
+
+		if (apply_tsys) {
+		    w2 = 1.0; // "i use this as a 'version' id  to test FC refresh bugs :-)"
+
+		    if (systemp[ant1] == 0 || systemp[ant2] == 0) {
+			zero_tsys++;
+			w1 = 0.0;
+		    } else
+			w1 = 1.0 / sqrt ((double) (systemp[ant1] * systemp[ant2]));
+
+		    msc.weight ().put (row, w1);
+		    msc.sigma ().put (row, w2);
+		}
+
+		msc.uvw ().put (row, uvw);
+		msc.arrayId ().put (row, nArray_p - 1);
+		msc.dataDescId ().put (row, ifno);
+		msc.fieldId ().put (row, ifield);
+
+		if (ifield_old != ifield)
+		    iscan++;
+
 		ifield_old = ifield;
-		msc.feed1().put(row,0);
-		msc.feed2().put(row,0);
-		msc.flagRow().put(row,False);
-		lastRowFlag = False;
-		msc.scanNumber().put(row,iscan);
-		msc.processorId().put(row,-1);
-		msc.observationId().put(row,0);
-		msc.stateId().put(row,-1);
-		if (!apply_tsys) {
-		    Vector<Float> tmp(nCorr);
-		    tmp = 1.0;
-		    msc.weight ().put (row, tmp);
-		    msc.sigma ().put (row, tmp);
-		}
+		msc.scanNumber ().put (row, iscan);
 	    }
-	    msc.exposure().put(row,interval);
-	    msc.interval().put(row,interval);
-
-	    // the dumb way: e.g. 3" -> 20" for 3c273
-	    Matrix<Complex> tvis(nCorr,win.nschan[ifno]);
-	    Cube<Bool> tflagCat(nCorr,win.nschan[ifno],nCat,False);
-	    Matrix<Bool> tflag = tflagCat.xyPlane(0); // references flagCat's storage
-
-	    Int woffset = win.ischan[ifno]-1;
-	    Int wsize   = win.nschan[ifno];
-	    for (int j = 0; j < nCorr; j++) {
-		for (Int i=0; i< wsize; i++) {
-		    tvis(j,i) = vis(j,i+woffset);
-		    tflag(j,i) = flag(j,i+woffset);
-		}
-	    }
-
-	    msc.data().put(row,tvis);
-	    msc.flag().put(row,tflag);
-	    msc.flagCategory().put(row,tflagCat);
-
-	    Bool rowFlag = allEQ(flag,True);
-	    if (rowFlag != lastRowFlag) {
-		msc.flagRow().put(row,rowFlag);
-		lastRowFlag = rowFlag;
-	    }
-
-	    msc.antenna1().put(row,ant1);
-	    msc.antenna2().put(row,ant2);
-	    msc.time().put(row,time);           // CARMA did begin of scan.., now middle (2009)
-	    msc.timeCentroid().put(row,time);   // do we really need this ? flagging/blanking ?
-
-	    if (apply_tsys) {
-		w2 = 1.0; // "i use this as a 'version' id  to test FC refresh bugs :-)"
-
-		if (systemp[ant1] == 0 || systemp[ant2] == 0) {
-		    zero_tsys++;
-		    w1 = 0.0;
-		} else
-		    w1 = 1.0 / sqrt ((double) (systemp[ant1]*systemp[ant2]));
-
-		msc.weight ().put (row, w1);
-		msc.sigma ().put (row, w2);
-	    }
-
-	    msc.uvw().put(row,uvw);
-	    msc.arrayId().put(row,nArray_p-1);
-	    msc.dataDescId().put(row,ifno);
-	    msc.fieldId().put(row,ifield);
-
-	    // TODO: SCAN_NUMBER needs to be added, they are all 0 now
-	    if (ifield_old != ifield)
-		iscan++;
-	    ifield_old = ifield;
-	    msc.scanNumber().put(row,iscan);
-	}  // ifNo
-
-	fcount[ifield]++;
+	}
     }
 
-  } // for(grou) : loop over all visibilities
-
-  cout << infile_p << ": Processed " << group << " visibilities."
-       << endl;
-  cout << "Found " << npoint << " pointings with "
-       <<  nfield << " unique source/fields "
-       <<  source_p.nelements() << " sources and "
-       <<  nArray_p << " arrays."
-       << endl;
-  if (DEBUG(1))
-    cout << "nAnt_p contains: " << nAnt_p.nelements() << endl;
-
+    cout << infile_p << ": Processed " << recnum << " visibilities."
+	 << endl;
+    cout << "Found " << npoint << " pointings with "
+	 <<  nfield << " unique source/fields "
+	 <<  source_p.nelements() << " sources and "
+	 <<  nArray_p << " arrays."
+	 << endl;
 }
 
 
@@ -1506,7 +1442,7 @@ main (int argc, char **argv)
 	cf.setupMeasurementSet (ms);
 	cf.fillObsTables ();
 	cf.fillAntennaTable ();
-	cf.fillMSMainTable (True, snumbase);
+	cf.fillMSMainTable (snumbase);
 	cf.fillSyscalTable ();
 	cf.fillSpectralWindowTable ();
 	cf.fillFieldTable ();
