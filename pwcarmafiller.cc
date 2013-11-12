@@ -154,7 +154,6 @@ private:
     float data[2*MAXCHAN], wdata[2*MAXCHAN];	// 2*MAXCHAN since (Re,Im) pairs complex numbers
     int flags[MAXCHAN], wflags[MAXCHAN];
     float systemp[MAXANT*MAXWIDE];
-    int nvis;
 };
 
 
