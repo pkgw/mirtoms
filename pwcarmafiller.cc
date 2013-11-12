@@ -116,7 +116,7 @@ private:
     MSColumns *msc_p;
     Int debug_level;
     String telescope_name, project_name, object_p, telescope_p,
-	observer_name, timsys_p;
+	observer_name;
     Vector<Int> nPixel_p, corrType_p, corrIndex_p;
     Matrix<Int> corrProduct_p;
     Double epoch_p;
@@ -707,9 +707,6 @@ CarmaFiller::fillAntennaTable ()
 	arrayXYZ_p = 0.0;
     }
 
-    String timsys = "TAI"; // hardcoded for now.
-    timsys_p = timsys;
-
     // Should use antdiam if available ...
 
     Float diameter = 25;
@@ -1081,23 +1078,23 @@ CarmaFiller::fillFeedTable ()
 }
 
 
-void CarmaFiller::fixEpochReferences() {
+void
+CarmaFiller::fixEpochReferences ()
+{
+    String time_ref("TAI"); // hardcoded for now.
 
-  if (DEBUG(1)) cout << "CarmaFiller::fixEpochReferences" << endl;
+    if (time_ref == "IAT")
+	time_ref = "TAI";
 
-  if (timsys_p=="IAT") timsys_p="TAI";
-  if (timsys_p=="UTC" || timsys_p=="TAI") {
-    String key("MEASURE_REFERENCE");
-    MSColumns msc(ms_p);
-    msc.time().rwKeywordSet().define(key,timsys_p);
-    msc.feed().time().rwKeywordSet().define(key,timsys_p);
-    msc.field().time().rwKeywordSet().define(key,timsys_p);
-    // Fits obslog time is probably local time instead of TAI or UTC
-    //PJT msc.obsLog().time().rwKeywordSet().define(key,timsys_p);
-  } else {
-    if (timsys_p!="")
-      cerr << "Unhandled time reference frame: "<<timsys_p<<endl;
-  }
+    if (time_ref == "UTC" || time_ref == "TAI") {
+	String key ("MEASURE_REFERENCE");
+	MSColumns msc (ms_p);
+
+	msc.time ().rwKeywordSet ().define (key, time_ref);
+	msc.feed ().time ().rwKeywordSet ().define (key, time_ref);
+	msc.field ().time ().rwKeywordSet ().define (key, time_ref);
+    } else if (time_ref != "")
+	WARN ("unhandled time reference system " << time_ref);
 }
 
 
