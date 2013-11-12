@@ -99,7 +99,8 @@ public:
     void fixEpochReferences ();
 
 private:
-    void Tracking (int record);
+    void setup_tracking ();
+    void track_updates (int record);
     void init_window ();
 
     bool uv_hasvar (const char *varname);
@@ -177,7 +178,7 @@ CarmaFiller::CarmaFiller (String& infile, Int debug_level, Bool apply_tsys)
 
     uvopen_c (&uv_handle_p, infile_p.chars (), "old");
     uvset_c (uv_handle_p, "preamble", "uvw/time/baseline", 0, 0.0, 0.0, 0.0);
-    Tracking (-1);
+    setup_tracking ();
 }
 
 
@@ -529,7 +530,7 @@ CarmaFiller::fillMSMainTable (Int snumbase)
 	    interval = inttime_p;
 
 	    if (uvupdate_c (uv_handle_p))
-		Tracking (recnum); // something important changed.
+		track_updates (recnum); // something important changed.
 
 	    // CARMA stuff for different "arrays" in the MS
 	    nAnt_p[num_arrays-1] = max (nAnt_p[num_arrays-1], ant1);
@@ -1098,168 +1099,117 @@ CarmaFiller::fixEpochReferences ()
 }
 
 
-void CarmaFiller::Tracking(int record)
+void
+CarmaFiller::setup_tracking ()
 {
-  if (DEBUG(3)) cout << "CarmaFiller::Tracking" << endl;
+    uvtrack_c (uv_handle_p, "nschan", "u");
+    uvtrack_c (uv_handle_p, "nspect", "u");
+    uvtrack_c (uv_handle_p, "ischan", "u");
+    uvtrack_c (uv_handle_p, "sdf", "u");
+    uvtrack_c (uv_handle_p, "sfreq", "u");
+    uvtrack_c (uv_handle_p, "restfreq", "u");
+    uvtrack_c (uv_handle_p, "freq", "u");
+    uvtrack_c (uv_handle_p, "nwide", "u");
+    uvtrack_c (uv_handle_p, "wfreq", "u");
+    uvtrack_c (uv_handle_p, "wwidth", "u");
+    uvtrack_c (uv_handle_p, "antpos", "u");
+    uvtrack_c (uv_handle_p, "dra", "u");
+    uvtrack_c (uv_handle_p, "ddec", "u");
+    uvtrack_c (uv_handle_p, "ra", "u");
+    uvtrack_c (uv_handle_p, "dec", "u");
+    uvtrack_c (uv_handle_p, "inttime", "u");
+}
 
-  char vdata[10];
-  int i, j, k;
 
-  if (record < 0) {                 // first time around: set variables to track
-    uvtrack_c(uv_handle_p,"nschan","u");   // narrow lines
-    uvtrack_c(uv_handle_p,"nspect","u");   // window averages
-    uvtrack_c(uv_handle_p,"ischan","u");
-    uvtrack_c(uv_handle_p,"sdf","u");
-    uvtrack_c(uv_handle_p,"sfreq","u");    // changes a lot (doppler)
+void
+CarmaFiller::track_updates (int record)
+{
+    // "uv_hasvar" is a misnomer here. It returns true if the variable has been updated.
 
-    uvtrack_c(uv_handle_p,"restfreq","u"); // never really changes....
-    uvtrack_c(uv_handle_p,"freq","u");     // never really changes....
+    if (uv_hasvar ("inttime"))
+	inttime_p = uv_getfloat ("inttime");
 
-
-    uvtrack_c(uv_handle_p,"nwide","u");
-    uvtrack_c(uv_handle_p,"wfreq","u");
-    uvtrack_c(uv_handle_p,"wwidth","u");
-
-    uvtrack_c(uv_handle_p,"antpos","u");   // array's
-    uvtrack_c(uv_handle_p,"dra","u");      // fields
-    uvtrack_c(uv_handle_p,"ddec","u");     // fields
-
-    uvtrack_c(uv_handle_p,"ra","u");       // source position
-    uvtrack_c(uv_handle_p,"dec","u");      // source position
-
-    uvtrack_c(uv_handle_p,"inttime","u");
-
-    // weather:
-    // uvtrack_c(uv_handle_p,"airtemp","u");
-    // uvtrack_c(uv_handle_p,"dewpoint","u");
-    // uvtrack_c(uv_handle_p,"relhumid","u");
-    // uvtrack_c(uv_handle_p,"winddir","u");
-    // uvtrack_c(uv_handle_p,"windmph","u");
-
-    return;
-  }
-
-  // here is all the special tracking code...
-
-  if (uv_hasvar ("inttime")) {
-      inttime_p = uv_getfloat ("inttime");
-  }
-
-  if (uv_hasvar ("antpos") && record) {
-      nants_p = uv_getint ("nants");
-      uv_getdoubles ("antpos", antpos, 3 * nants_p);
-    if (DEBUG(2)) {
-      cout << "Found " << nants_p << " antennas for array "
-	   << num_arrays << endl;
-      for (int i=0; i<nants_p; i++) {
-        cout << antpos[i] << " " <<
-                antpos[i+nants_p] << " " <<
-                antpos[i+nants_p*2] << endl;
-      }
+    if (uv_hasvar ("antpos") && record > 0) {
+	nants_p = uv_getint ("nants");
+	uv_getdoubles ("antpos", antpos, 3 * nants_p);
     }
-  }
 
-  if (win.nspect > 0) {
-    if (uv_hasvar ("systemp")) {
-	uv_getfloats ("systemp", systemp, nants_p * win.nspect);
-      if (DEBUG(3)) {
-	cout << "Found systemps (new scan)" ;
-	for (Int i=0; i<nants_p; i++)  cout << systemp[i] << " ";
-	cout << endl;
-      }
+    if (win.nspect > 0) {
+	if (uv_hasvar ("systemp"))
+	    uv_getfloats ("systemp", systemp, nants_p * win.nspect);
+    } else {
+	if (uv_hasvar ("wsystemp"))
+	    uv_getfloats ("wsystemp", systemp, nants_p);
     }
-  } else {
-    if (uv_hasvar ("wsystemp")) {
-	uv_getfloats ("wsystemp", systemp, nants_p);
-      if (DEBUG(3)) {
-	cout << "Found wsystemps (new scan)" ;
-	for (Int i=0; i<nants_p; i++)  cout << systemp[i] << " ";
-	cout << endl;
-      }
+
+    int source_updated = uv_hasvar ("source");
+
+    if (source_updated) {
+	object_p = uv_getstr ("source");
+
+	// This leads to duplicate values; we strip them out later.
+	source_p.resize (source_p.nelements () + 1, True);
+	source_p[source_p.nelements () - 1] = object_p;
+
+	ras_p.resize (ras_p.nelements () + 1, True);
+	decs_p.resize (decs_p.nelements () + 1, True);
+	ras_p[ras_p.nelements() - 1] = 0.0;
+	decs_p[decs_p.nelements() - 1] = 0.0;
+
+	purpose_p.resize (purpose_p.nelements () + 1, True);
+	purpose_p[purpose_p.nelements () - 1] = "S";
     }
-  }
 
-  // SOURCE and DRA/DDEC are mixed together they define a row in the FIELD table
-  int source_updated = uv_hasvar ("source");
+    if (source_updated || uv_hasvar ("dra") || uv_hasvar ("ddec")) {
+	int i, j, k;
 
-  if (source_updated) {
-    object_p = uv_getstr ("source");
+	npoint++;
+	ra_p = uv_getdouble ("ra");
+	dec_p = uv_getdouble ("dec");
+	dra_p = ddec_p = 0.;
+	object_p = uv_getstr ("source");
 
+	for (i = 0, j = -1;  i < (int) source_p.nelements (); i++) {
+	    if (source_p[i] == object_p) {
+		j = i;
+		break;
+	    }
+	}
 
-    // bug: as is, source_p will get repeated values, trim it later
+	for (i = 0, k = -1; i < nfield; i++) {
+	    if (dra[i] == dra_p && ddec[i] == ddec_p && field[i] == j) {
+		k = i;
+		break;
+	    }
+	}
 
-    source_p.resize(source_p.nelements()+1, True);     // need to copy the old values
-    source_p[source_p.nelements()-1] = object_p;
+	if (k < 0) {
+	    // We have a new source/field combination
+	    ifield = nfield;
+	    nfield++;
 
-    ras_p.resize(ras_p.nelements()+1, True);
-    decs_p.resize(decs_p.nelements()+1, True);
-    ras_p[ras_p.nelements()-1] = 0.0;                  // if no source at (0,0) offset
-    decs_p[decs_p.nelements()-1] = 0.0;                // these would never be initialized
+	    if (nfield >= MAXFIELD)
+		throw AipsError ("cannot handle more than " + String::toString (MAXFIELD) + " fields");
 
+	    ra[ifield] = ra_p;
+	    dec[ifield] = dec_p;
+	    dra[ifield] = dra_p;
+	    ddec[ifield] = ddec_p;
+	    field[ifield] = j;
+	    sid_p[ifield] = j + 1;
 
-    vdata[0] = 'S'; vdata[1] = '\0';
-    purpose_p.resize(purpose_p.nelements()+1, True);   // need to copy the old values
-    purpose_p[purpose_p.nelements()-1] = vdata;
-
-  }
-
-  if (source_updated || uv_hasvar ("dra") || uv_hasvar ("ddec")) {
-    npoint++;
-    ra_p = uv_getdouble ("ra");
-    dec_p = uv_getdouble ("dec");
-    dra_p = ddec_p = 0.;
-    object_p = uv_getstr ("source");
-
-    for (i = 0, j = -1;  i < (int) source_p.nelements (); i++) {
-	if (source_p[i] == object_p) {
-	    j = i;
-	    break;
+	    if (dra_p == 0.0 && ddec_p == 0.0) {
+		// Store ra/dec for SOURCE table as well
+		ras_p[j] = ra_p;
+		decs_p[j] = dec_p;
+		// We mark the central pointing this way to change the name
+		// later.
+		sid_p[ifield] = -sid_p[ifield];
+	    }
+	} else {
+	    ifield = k;
 	}
     }
-    // j should always be >= 0 now, and is the source index
-
-    for (i=0, k=-1; i<nfield; i++) { // check if we had this pointing/source before
-      if (dra[i] == dra_p && ddec[i] == ddec_p && field[i] == j) {
-	k = i;
-	break;
-      }
-    }
-    // k could be -1, when a new field/source is found
-
-    if (DEBUG(1)) {
-      cout << "POINTING: " << npoint
-	   << " source: " << object_p << " [" << j << "," << k << "] "
-	   << " dra/ddec: "   << dra_p << " " << ddec_p << endl;
-    }
-
-    if (k<0) {                             // we have a new source/field combination
-      ifield = nfield;
-      nfield++;
-      if (DEBUG(2)) cout << "Adding new field " << ifield
-			 << " for " << object_p << source_p[j]
-			 << " at "
-			 << dra_p *206264.8062 << " "
-			 << ddec_p*206264.8062 << " arcsec." << endl;
-
-      if (nfield >= MAXFIELD) {
-	cout << "Cannot handle more than " << MAXFIELD << " fields." << endl;
-	exit(1);
-      }
-      ra[ifield]  = ra_p;
-      dec[ifield] = dec_p;
-      dra[ifield]  = dra_p;
-      ddec[ifield] = ddec_p;
-      field[ifield] = j;
-      sid_p[ifield] = j + 1;
-      if (dra_p == 0.0 && ddec_p==0.0) {   // store ra/dec for SOURCE table as well
-	ras_p[j]  = ra_p;
-	decs_p[j] = dec_p;
-	sid_p[ifield] = -sid_p[ifield];    // make central one -index for later NAME change
-      }
-    } else {
-      ifield = k;
-    }
-  }
 }
 
 //
