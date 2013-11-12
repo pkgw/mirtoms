@@ -369,8 +369,6 @@ CarmaFiller::setupMeasurementSet (const String& ms_path)
 							16384 / npol_p / tileSize));
     TiledShapeStMan tiledStMan1f ("TiledFlag", IPosition (3, npol_p, tileSize,
 							  16384 / npol_p / tileSize));
-    TiledShapeStMan tiledStMan2 ("TiledWeight",	IPosition (3, npol_p, tileSize,
-							   16384 / npol_p / tileSize));
     TiledColumnStMan tiledStMan3 ("TiledUVW", IPosition (2, 3, 1024));
 
     newtab.bindColumn (MS::columnName (MS::DATA), tiledStMan1);
