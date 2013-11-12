@@ -67,9 +67,9 @@ typedef struct window {
 } WINDOW;
 
 
-class CarmaFiller {
+class Converter {
 public:
-    CarmaFiller (String& infile, Int debug_level=0, Bool apply_tsys=False);
+    Converter (String& infile, Int debug_level=0, Bool apply_tsys=False);
 
     void checkInput ();
     void setupMeasurementSet (const String& ms_path);
@@ -144,7 +144,7 @@ private:
 };
 
 
-CarmaFiller::CarmaFiller (String& infile, Int debug_level, Bool apply_tsys)
+Converter::Converter (String& infile, Int debug_level, Bool apply_tsys)
 {
     num_arrays = 0;
     nfield = 0;
@@ -155,9 +155,9 @@ CarmaFiller::CarmaFiller (String& infile, Int debug_level, Bool apply_tsys)
     this->apply_tsys = apply_tsys;
 
     if (sizeof (double) != sizeof (Double))
-	WARN ("sizeof(Double) != sizeof(double); pwcarmafiller will probably fail");
+	WARN ("sizeof(Double) != sizeof(double); mirtoms will probably fail");
     if (sizeof (int) != sizeof (Int))
-	WARN ("sizeof(Int) != sizeof(int); pwcarmafiller will probably fail");
+	WARN ("sizeof(Int) != sizeof(int); mirtoms will probably fail");
 
     uvopen_c (&uv_handle_p, infile_p.chars (), "old");
     uvset_c (uv_handle_p, "preamble", "uvw/time/baseline", 0, 0.0, 0.0, 0.0);
@@ -166,7 +166,7 @@ CarmaFiller::CarmaFiller (String& infile, Int debug_level, Bool apply_tsys)
 
 
 bool
-CarmaFiller::uv_hasvar (const char *varname)
+Converter::uv_hasvar (const char *varname)
 {
     /* Also tests whether the variable has been updated if it's being tracked. */
     int vupd, vlen;
@@ -177,7 +177,7 @@ CarmaFiller::uv_hasvar (const char *varname)
 }
 
 char *
-CarmaFiller::uv_getstr (const char *varname)
+Converter::uv_getstr (const char *varname)
 {
     char *value = new char[64];
     // note: can't use sizeof(*value) since the size parameter is an int. Boo.
@@ -186,7 +186,7 @@ CarmaFiller::uv_getstr (const char *varname)
 }
 
 int
-CarmaFiller::uv_getint (const char *varname)
+Converter::uv_getint (const char *varname)
 {
     int value;
     uvgetvr_c (uv_handle_p, H_INT, varname, (char *) &value, 1);
@@ -195,7 +195,7 @@ CarmaFiller::uv_getint (const char *varname)
 }
 
 float
-CarmaFiller::uv_getfloat (const char *varname)
+Converter::uv_getfloat (const char *varname)
 {
     float value;
     uvgetvr_c (uv_handle_p, H_REAL, varname, (char *) &value, 1);
@@ -203,7 +203,7 @@ CarmaFiller::uv_getfloat (const char *varname)
 }
 
 double
-CarmaFiller::uv_getdouble (const char *varname)
+Converter::uv_getdouble (const char *varname)
 {
     double value;
     uvgetvr_c (uv_handle_p, H_DBLE, varname, (char *) &value, 1);
@@ -211,20 +211,20 @@ CarmaFiller::uv_getdouble (const char *varname)
 }
 
 void
-CarmaFiller::uv_getfloats (const char *varname, float *dest, int count)
+Converter::uv_getfloats (const char *varname, float *dest, int count)
 {
     uvgetvr_c (uv_handle_p, H_REAL, varname, (char *) dest, count);
 }
 
 void
-CarmaFiller::uv_getdoubles (const char *varname, double *dest, int count)
+Converter::uv_getdoubles (const char *varname, double *dest, int count)
 {
     uvgetvr_c (uv_handle_p, H_DBLE, varname, (char *) dest, count);
 }
 
 
 void
-CarmaFiller::checkInput ()
+Converter::checkInput ()
 {
     Int i, nread, nwread;
 
@@ -325,7 +325,7 @@ CarmaFiller::checkInput ()
 
 
 void
-CarmaFiller::setupMeasurementSet (const String& ms_path)
+Converter::setupMeasurementSet (const String& ms_path)
 {
     // Begin cargo-cult programming.
 
@@ -396,7 +396,7 @@ CarmaFiller::setupMeasurementSet (const String& ms_path)
 	TableInfo& info (ms.tableInfo ());
 	info.setType (TableInfo::type (TableInfo::MEASUREMENTSET));
 	info.setSubType (String ("MIRIAD"));
-	info.readmeAddLine ("made with pwcarmafiller");
+	info.readmeAddLine ("made with mirtoms");
     }
 
     ms_p = ms;
@@ -405,7 +405,7 @@ CarmaFiller::setupMeasurementSet (const String& ms_path)
 
 
 void
-CarmaFiller::fillObsTables ()
+Converter::fillObsTables ()
 {
     ms_p.observation ().addRow ();
     MSObservationColumns msObsCol (ms_p.observation ());
@@ -431,8 +431,8 @@ CarmaFiller::fillObsTables ()
 	ms_p.history ().addRow ();
 	msHisCol.observationId ().put (row, 0);
 	msHisCol.priority ().put (row, "NORMAL");
-	msHisCol.origin ().put (row, "CarmaFiller::fillObsTables");
-	msHisCol.application ().put (row, "pwcarmafiller");
+	msHisCol.origin ().put (row, "Converter::fillObsTables");
+	msHisCol.application ().put (row, "mirtoms");
 	msHisCol.cliCommand ().put (row, Vector<String> (0));
 	msHisCol.message ().put (row, hline);
 	row++;
@@ -443,7 +443,7 @@ CarmaFiller::fillObsTables ()
 
 
 void
-CarmaFiller::fillMSMainTable (Int snumbase)
+Converter::fillMSMainTable (Int snumbase)
 {
     MSColumns& msc (*msc_p);
     Int nCorr = npol_p;
@@ -656,7 +656,7 @@ CarmaFiller::fillMSMainTable (Int snumbase)
 
 
 void
-CarmaFiller::fillAntennaTable ()
+Converter::fillAntennaTable ()
 {
     // TODO: much of this should be tabulated, or preferably not hardcoded at all ...
     arrayXYZ_p.resize (3);
@@ -773,7 +773,7 @@ CarmaFiller::fillAntennaTable ()
 
 
 void
-CarmaFiller::fillSyscalTable ()
+Converter::fillSyscalTable ()
 {
     MSSysCalColumns& msSys (msc_p->sysCal ());
     Vector<Float> tsys(1);
@@ -798,7 +798,7 @@ CarmaFiller::fillSyscalTable ()
 
 
 void
-CarmaFiller::fillSpectralWindowTable ()
+Converter::fillSpectralWindowTable ()
 {
     MSSpWindowColumns& msSpW (msc_p->spectralWindow ());
     MSDataDescColumns& msDD (msc_p->dataDescription ());
@@ -893,7 +893,7 @@ CarmaFiller::fillSpectralWindowTable ()
 
 
 void
-CarmaFiller::fillFieldTable ()
+Converter::fillFieldTable ()
 {
     msc_p->setDirectionRef (epochRef_p);
 
@@ -944,7 +944,7 @@ CarmaFiller::fillFieldTable ()
 
 
 void
-CarmaFiller::fillSourceTable ()
+Converter::fillSourceTable ()
 {
     MSSourceColumns& msSource (msc_p->source ());
     Int srcidx = -1;
@@ -989,7 +989,7 @@ CarmaFiller::fillSourceTable ()
 
 
 void
-CarmaFiller::fillFeedTable ()
+Converter::fillFeedTable ()
 {
     MSFeedColumns msfc (ms_p.feed ());
     MSPolarizationColumns& msPolC (msc_p->polarization ());
@@ -1046,7 +1046,7 @@ CarmaFiller::fillFeedTable ()
 
 
 void
-CarmaFiller::fixEpochReferences ()
+Converter::fixEpochReferences ()
 {
     String time_ref("TAI"); // hardcoded for now.
 
@@ -1066,7 +1066,7 @@ CarmaFiller::fixEpochReferences ()
 
 
 void
-CarmaFiller::setup_tracking ()
+Converter::setup_tracking ()
 {
     uvtrack_c (uv_handle_p, "nschan", "u");
     uvtrack_c (uv_handle_p, "nspect", "u");
@@ -1088,7 +1088,7 @@ CarmaFiller::setup_tracking ()
 
 
 void
-CarmaFiller::track_updates ()
+Converter::track_updates ()
 {
     // "uv_hasvar" is a misnomer here. It returns true if the variable has been updated.
 
@@ -1177,7 +1177,7 @@ CarmaFiller::track_updates ()
 
 
 void
-CarmaFiller::init_window_info ()
+Converter::init_window_info ()
 {
     /* "this is also a nasty routine. It makes assumptions on a relationship
        between narrow and window averages which normally exists for CARMA
@@ -1299,19 +1299,18 @@ main (int argc, char **argv)
 	while (inp.debug (debug + 1))
 	    debug++;
 
-	CarmaFiller cf (vis, debug, apply_tsys);
-
-	cf.checkInput ();
-	cf.setupMeasurementSet (ms);
-	cf.fillObsTables ();
-	cf.fillAntennaTable ();
-	cf.fillMSMainTable (snumbase);
-	cf.fillSyscalTable ();
-	cf.fillSpectralWindowTable ();
-	cf.fillFieldTable ();
-	cf.fillSourceTable ();
-	cf.fillFeedTable ();
-	cf.fixEpochReferences ();
+	Converter conv (vis, debug, apply_tsys);
+	conv.checkInput ();
+	conv.setupMeasurementSet (ms);
+	conv.fillObsTables ();
+	conv.fillAntennaTable ();
+	conv.fillMSMainTable (snumbase);
+	conv.fillSyscalTable ();
+	conv.fillSpectralWindowTable ();
+	conv.fillFieldTable ();
+	conv.fillSourceTable ();
+	conv.fillFeedTable ();
+	conv.fixEpochReferences ();
     } catch (AipsError x) {
 	cerr << "error: " << x.getMesg () << endl;
 	return 1;
