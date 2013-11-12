@@ -935,19 +935,9 @@ CarmaFiller::fillFieldTable ()
 	int sid = sid_p[fld];
 
 	ms_p.field ().addRow ();
-
-	if (sid > 0) {
-	    msField.sourceId ().put (fld, sid - 1);
-	    msField.name ().put (fld, source_p[field[fld]]);
-	} else {
-	    // "a special test where the central source gets _C appended to the source name"
-	    msField.sourceId ().put (fld, -sid - 1);
-	    // "or keep them all same name"
-	    msField.name ().put (fld, source_p[field[fld]]);
-	}
-
+	msField.sourceId ().put (fld, sid - 1);
+	msField.name ().put (fld, source_p[field[fld]]);
 	msField.code ().put (fld, purpose_p[field[fld]]);
-
 	msField.numPoly ().put(fld, 0);
 
 	cosdec = cos (dec[fld]);
@@ -1194,12 +1184,9 @@ CarmaFiller::track_updates ()
 	    sid_p[ifield] = j + 1;
 
 	    if (dra_p == 0.0 && ddec_p == 0.0) {
-		// Store ra/dec for SOURCE table as well
+		// Store ra/dec for SOURCE table as well.
 		ras_p[j] = ra_p;
 		decs_p[j] = dec_p;
-		// We mark the central pointing this way to change the name
-		// later.
-		sid_p[ifield] = -sid_p[ifield];
 	    }
 	} else {
 	    ifield = k;
