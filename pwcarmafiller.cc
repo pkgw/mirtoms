@@ -1,32 +1,27 @@
-// pwcarmafiller:  (carma) miriad dataset to MeasurementSet conversion
-// Modified by Peter Williams for ATA data
-// Copyright 2010-2013
-//
-// Base code:
-// Copyright (C) 1997,2000,2001,2002
-// Associated Universities, Inc. Washington DC, USA.
-//
-// This program is free software; you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation; either version 2 of the License, or
-// (at your option) any later version.
-//
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License
-// along with this program; if not, write to the Free Software
-// Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+/* pwcarmafiller: hacked MIRIAD to MeasurementSet conversion
+   adapted from Peter Teuben's carmafiller by Peter Williams.
 
+   Copyright 2010-2013 Peter Williams, Peter Teuben
+   Earlier versions copyright 1997, 2000, 2001, 2002
+     Associated Universities, Inc. Washington DC, USA.
+
+   Licensed under the GNU GPL version 2 or later.
+*/
+
+/*
+Based off of carmafiller, which came from bimafiller, and before that,
+uvfitsfiller.
+
+The big problem with this program right now is that we really need to make two
+passes through the dataset to build up lists of all of the pol'n configs,
+pointings, etc., before we can actually start writing everything out.
+*/
 
 #include <casa/aips.h>
 #include <casa/stdio.h>
 #include <casa/iostream.h>
 #include <casa/OS/File.h>
 #include <casa/Utilities/GenSort.h>
-
 #include <casa/Arrays/Cube.h>
 #include <casa/Arrays/Matrix.h>
 #include <casa/Arrays/Vector.h>
@@ -34,35 +29,27 @@
 #include <casa/Arrays/ArrayUtil.h>
 #include <casa/Arrays/ArrayLogical.h>
 #include <casa/Arrays/MatrixMath.h>
-
 #include <casa/Inputs/Input.h>
+#include <casa/namespace.h>
 
 #include <measures/Measures.h>
 #include <measures/Measures/MPosition.h>
 #include <measures/Measures/MeasData.h>
 #include <measures/Measures/Stokes.h>
-
 #include <tables/Tables.h>
 #include <tables/Tables/TableInfo.h>
-
 #include <ms/MeasurementSets.h>
 
 #include <miriad-c/maxdimc.h>
 #include <miriad-c/miriad.h>
 
-#include <casa/namespace.h>
 
 #ifndef MAXFIELD
 # define MAXFIELD 256 // TODO: kill this hardcoding.
 #endif
 
-// Based off of carmafiller, which came from bimafiller, and before that,
-// uvfitsfiller.
-//
-// The big problem with this program right now is that we really need to make
-// two passes through the dataset to build up lists of all of the pol'n
-// configs, pointings, etc., before we can actually start writing everything
-// out.
+#define WARN(message) (cerr << "warning: " << message << endl);
+
 
 typedef struct window {
     // CASA defines everything mid-band, mid-interval
@@ -78,6 +65,7 @@ typedef struct window {
     float  wfreq[MAXWIDE];           // freq
     float  wwidth[MAXWIDE];          // width
 } WINDOW;
+
 
 class CarmaFiller {
 public:
@@ -158,26 +146,24 @@ private:
 
 CarmaFiller::CarmaFiller (String& infile, Int debug_level, Bool apply_tsys)
 {
-    infile_p = infile;
     num_arrays = 0;
     nfield = 0;
     npoint = 0;
+
+    infile_p = infile;
     this->debug_level = debug_level;
     this->apply_tsys = apply_tsys;
 
     if (sizeof (double) != sizeof (Double))
-	cout << "Double != double; carmafiller will probably fail" << endl;
+	WARN ("sizeof(Double) != sizeof(double); pwcarmafiller will probably fail");
     if (sizeof (int) != sizeof (Int))
-	cout << "int != Int; carmafiller will probably fail" << endl;
+	WARN ("sizeof(Int) != sizeof(int); pwcarmafiller will probably fail");
 
     uvopen_c (&uv_handle_p, infile_p.chars (), "old");
     uvset_c (uv_handle_p, "preamble", "uvw/time/baseline", 0, 0.0, 0.0, 0.0);
     setup_tracking ();
 }
 
-
-#define DEBUG(level) (this->debug_level >= (level))
-#define WARN(message) (cerr << "warning: " << message << endl);
 
 bool
 CarmaFiller::uv_hasvar (const char *varname)
@@ -1198,7 +1184,8 @@ CarmaFiller::init_window_info ()
        between narrow and window averages which normally exists for CARMA
        telescope data, but which in principle can be modified by uvcat/uvaver
        and possibly break this routine... (there has been some talk at the
-       site to write subsets of the full data, which could break this routine)
+       site to write subsets of the full data, which could break this
+       routine)"
     */
 
     int nchan, nspect, nwide;
