@@ -798,32 +798,28 @@ CarmaFiller::fillAntennaTable ()
 }
 
 
-void CarmaFiller::fillSyscalTable()
+void
+CarmaFiller::fillSyscalTable ()
 {
-  if (DEBUG(1)) cout << "CarmaFiller::fillSyscalTable" << endl;
+    MSSysCalColumns& msSys (msc_p->sysCal ());
+    Vector<Float> tsys(1);
+    Int row = -1;
 
-  MSSysCalColumns&     msSys(msc_p->sysCal());
-  Vector<Float> Systemp(1);    // should we set both receptors same?
-  static Int row = -1;
+    // Note that we're using only one value for each receptor, since MIRIAD
+    // has weak support for differing values (cf. xtsys and ytsys variables).
 
-  if (DEBUG(1))
-    for (Int i=0; i<nants_p; i++)
-      cout  << "SYSTEMP: " << i << ": " << systemp[i] << endl;
+    for (Int i = 0; i < nants_p; i++) {
+	ms_p.sysCal ().addRow ();
+	row++;
 
-
-  for (Int i=0; i<nants_p; i++) {
-    ms_p.sysCal().addRow();
-    row++;  // should be a static, since this routine will be called again
-
-    msSys.antennaId().put(row,i);
-    msSys.feedId().put(row,0);
-    msSys.spectralWindowId().put(row,-1);    // all of them for now .....
-    msSys.time().put(row,time_p);
-    msSys.interval().put(row,-1.0);
-
-    Systemp(0) = systemp[i];
-    msSys.tsys().put(row,Systemp);
-  }
+	msSys.antennaId ().put (row, i);
+	msSys.feedId ().put (row, 0);
+	msSys.spectralWindowId ().put (row, -1);
+	msSys.time ().put (row, time_p);
+	msSys.interval ().put (row, -1.0);
+	tsys(0) = systemp[i];
+	msSys.tsys ().put (row, tsys);
+    }
 }
 
 
