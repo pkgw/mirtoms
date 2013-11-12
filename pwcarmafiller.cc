@@ -823,115 +823,98 @@ CarmaFiller::fillSyscalTable ()
 }
 
 
-void CarmaFiller::fillSpectralWindowTable()
+void
+CarmaFiller::fillSpectralWindowTable ()
 {
-  if (DEBUG(1)) cout << "CarmaFiller::fillSpectralWindowTable" << endl;
+    MSSpWindowColumns& msSpW (msc_p->spectralWindow ());
+    MSDataDescColumns& msDD (msc_p->dataDescription ());
+    MSPolarizationColumns& msPol (msc_p->polarization ());
+    MSDopplerColumns& msDop (msc_p->doppler ());
 
-  MSSpWindowColumns&      msSpW(msc_p->spectralWindow());
-  MSDataDescColumns&      msDD(msc_p->dataDescription());
-  MSPolarizationColumns&  msPol(msc_p->polarization());
-  MSDopplerColumns&       msDop(msc_p->doppler());
+    MDirection::Types dirtype = epochRef_p;
+    MEpoch ep (Quantity (time_p, "s"), MEpoch::UTC);
+    MPosition obspos (MVPosition (arrayXYZ_p), MPosition::ITRF);
+    MDirection dir (Quantity (ra_p, "rad"), Quantity (dec_p, "rad"), dirtype);
+    MeasFrame frame (ep, obspos, dir);
 
-  Int nCorr = npol_p;
-  Int i, j, side;
-  Double BW = 0.0;
+    MFrequency::Types freqsys_p = MFrequency::LSRK;
+    MFrequency::Convert tolsr (MFrequency::TOPO, MFrequency::Ref (freqsys_p, frame));
 
-  MDirection::Types dirtype = epochRef_p;    // MDirection::B1950 or MDirection::J2000;
-  MEpoch ep(Quantity(time_p, "s"), MEpoch::UTC);
-  // ERROR::   type specifier omitted for parameter  in older AIPS++, now works in CASA
-  MPosition obspos(MVPosition(arrayXYZ_p), MPosition::ITRF);
-  //MPosition obspos(MVPosition(arrayXYZ_p), MPosition::WGS84);
-  MDirection dir(Quantity(ra_p, "rad"), Quantity(dec_p, "rad"), dirtype);
-  MeasFrame frame(ep, obspos, dir);
+    // We currently handle only one polarization setup.
+    ms_p.polarization ().addRow ();
+    msPol.numCorr ().put (0, npol_p);
+    msPol.corrType ().put (0, corrType_p);
+    msPol.corrProduct ().put (0, corrProduct_p);
+    msPol.flagRow ().put (0, False);
 
-  MFrequency::Types freqsys_p = MFrequency::LSRK;
-
-  MFrequency::Convert tolsr(MFrequency::TOPO,
-			    MFrequency::Ref(freqsys_p, frame));
-  // fill out the polarization info (only 1 entry allowed for now)
-  ms_p.polarization().addRow();
-  msPol.numCorr().put(0,nCorr);
-  msPol.corrType().put(0,corrType_p);
-  msPol.corrProduct().put(0,corrProduct_p);
-  msPol.flagRow().put(0,False);
-
-  // fill out doppler table (only 1 entry needed, CARMA data only identify 1 line :-(
-  for (i=0; i<win.nspect; i++) {
-    ms_p.doppler().addRow();
-    msDop.dopplerId().put(i,i);
-    msDop.sourceId().put(i,-1);     // how the heck..... for all i guess
-    msDop.transitionId().put(i,-1);
-    msDop.velDefMeas().put(i,MDoppler(Quantity(0),MDoppler::RADIO));
-  }
-
-  for (i=0; i < win.nspect; i++)
-    {
-
-    Int n = win.nschan[i];
-    Vector<Double> f(n), w(n);
-
-    ms_p.spectralWindow().addRow();
-    ms_p.dataDescription().addRow();
-
-    msDD.spectralWindowId().put(i,i);
-    msDD.polarizationId().put(i,0);
-    msDD.flagRow().put(i,False);
-
-    msSpW.numChan().put(i,win.nschan[i]);
-    BW = 0.0;
-    Double fwin = win.sfreq[i]*1e9;
-    if (DEBUG(1)) cout << "Fwin: OBS=" << fwin/1e9;
-    fwin = tolsr(fwin).getValue().getValue();
-    if (DEBUG(1)) cout << " LSR=" << fwin/1e9 << endl;
-    for (j=0; j < win.nschan[i]; j++) {
-      f(j) = fwin + j * win.sdf[i] * 1e9;
-      w(j) = abs(win.sdf[i]*1e9);
-      BW += w(j);
+    for (Int i = 0; i < win.nspect; i++) {
+	ms_p.doppler ().addRow ();
+	msDop.dopplerId ().put (i, i);
+	msDop.sourceId ().put (i, -1); // applies to all sources.
+	msDop.transitionId ().put (i, -1);
+	msDop.velDefMeas ().put (i, MDoppler (Quantity (0), MDoppler::RADIO));
     }
 
-    msSpW.chanFreq().put(i,f);
-    if (i<win.nspect)
-      msSpW.refFrequency().put(i,win.restfreq[i]*1e9);
-    else
-      msSpW.refFrequency().put(i,freq_p);            // no reference for wide band???
+    for (Int i = 0; i < win.nspect; i++) {
+	Int n = win.nschan[i];
+	Vector<Double> f(n), w(n);
 
-    msSpW.resolution().put(i,w);
-    msSpW.chanWidth().put(i,w);
-    msSpW.effectiveBW().put(i,w);
-    msSpW.totalBandwidth().put(i,BW);
-    msSpW.ifConvChain().put(i,0);
-    // can also do it implicitly via Measures you give to the freq's
-    msSpW.measFreqRef().put(i,freqsys_p);
-    if (i<win.nspect)
-      msSpW.dopplerId().put(i,i);    // CARMA has only 1 ref freq line
-    else
-      msSpW.dopplerId().put(i,-1);    // no ref
+	ms_p.spectralWindow ().addRow ();
+	ms_p.dataDescription ().addRow ();
 
-    if (win.sdf[i] > 0)      side = 1;
-    else if (win.sdf[i] < 0) side = -1;
-    else                     side = 0;
+	msDD.spectralWindowId ().put (i, i);
+	msDD.polarizationId ().put (i, 0);
+	msDD.flagRow ().put (i, False);
 
-    switch (win.code[i]) {
-    case 'N':
-      msSpW.netSideband().put(i,side);
-      msSpW.freqGroup().put(i,1);
-      msSpW.freqGroupName().put(i,"MULTI-CHANNEL-DATA");
-      break;
-    case 'W':
-      msSpW.netSideband().put(i,side);
-      msSpW.freqGroup().put(i,3);
-      msSpW.freqGroupName().put(i,"SIDE-BAND-AVERAGE");
-      break;
-    case 'S':
-      msSpW.netSideband().put(i,side);
-      msSpW.freqGroup().put(i,2);
-      msSpW.freqGroupName().put(i,"MULTI-CHANNEL-AVG");
-      break;
-    default:
-      throw AipsError ("bad code for a spectral window");
-      break;
+	msSpW.numChan ().put (i, win.nschan[i]);
+
+	Double BW = 0.0;
+	Double fwin = win.sfreq[i] * 1e9; // GHz -> Hz; a lot more of this on the way
+	fwin = tolsr (fwin).getValue ().getValue ();
+
+	for (Int j = 0; j < win.nschan[i]; j++) {
+	    f(j) = fwin + j * win.sdf[i] * 1e9;
+	    w(j) = abs (win.sdf[i] * 1e9);
+	    BW += w(j);
+	}
+
+	msSpW.chanFreq ().put (i, f);
+	if (i < win.nspect)
+	    msSpW.refFrequency ().put (i, win.restfreq[i] * 1e9);
+	else
+	    msSpW.refFrequency ().put (i, freq_p);
+
+	msSpW.resolution ().put (i, w);
+	msSpW.chanWidth ().put (i, w);
+	msSpW.effectiveBW ().put (i, w);
+	msSpW.totalBandwidth ().put (i, BW);
+	msSpW.ifConvChain ().put (i, 0);
+	msSpW.measFreqRef ().put (i, freqsys_p);
+	if (i < win.nspect)
+	    msSpW.dopplerId ().put (i, i); // CARMA has only 1 ref freq line
+	else
+	    msSpW.dopplerId ().put (i, -1); // no ref
+
+	if (win.sdf[i] > 0)
+	    msSpW.netSideband ().put (i, 1);
+	else if (win.sdf[i] < 0)
+	    msSpW.netSideband ().put (i, -1);
+	else
+	    msSpW.netSideband ().put (i, 0);
+
+	switch (win.code[i]) {
+	case 'N':
+	    msSpW.freqGroup ().put (i, 1);
+	    msSpW.freqGroupName ().put (i, "MULTI-CHANNEL-DATA");
+	    break;
+	case 'S':
+	    msSpW.freqGroup ().put (i, 2);
+	    msSpW.freqGroupName ().put (i, "MULTI-CHANNEL-AVG");
+	    break;
+	default:
+	    throw AipsError ("bad code for a spectral window");
+	}
     }
-  }
 }
 
 
