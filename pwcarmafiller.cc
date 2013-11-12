@@ -1168,8 +1168,10 @@ CarmaFiller::track_updates ()
 	    }
 	}
 
-	if (k < 0) {
-	    // We have a new source/field combination
+	if (k >= 0) {
+	    // This source/field combination is already known.
+	    ifield = k;
+	} else {
 	    ifield = nfield;
 	    nfield++;
 
@@ -1188,8 +1190,6 @@ CarmaFiller::track_updates ()
 		ras_p[j] = ra_p;
 		decs_p[j] = dec_p;
 	    }
-	} else {
-	    ifield = k;
 	}
     }
 }
