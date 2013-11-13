@@ -22,7 +22,8 @@ These changes make it so that:
   * you can export a bunch of MIRIAD datasets, concatenate them, and image
     them with the CASA imager, with propert Stokes processing;
   * you can run André Offringa’s [aoflagger](http://aoflagger.sourceforge.net)
-    on your MIRIAD datasets and then import the flags back into MIRIAD.
+    on your MIRIAD datasets and then import the flags back into MIRIAD,
+    using the included `mirmsflagextract` tool.
 
 The `mirtoms` tool has severe limitations and will only work with very simple
 MIRIAD datasets. It also probably gets various details wrong that will bite
