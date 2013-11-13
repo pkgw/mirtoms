@@ -9,7 +9,7 @@ This program is customized to work with simple ATA datasets. Key differences
 with `carmafiller` are:
 
   * it is [less chatty](http://newton.cx/~peter/2012/12/silence-is-golden/);
-  * it includes appropriate hardcoded info for ATA datasets;
+  * it includes appropriate hardcoded info for the ATA;
   * groups of related polarization records are written properly, so
     CASA Stokes processing can work;
   * the starting SCAN_NUM can be set on the command-line, so that multiple
@@ -24,6 +24,11 @@ These changes make it so that:
   * you can run André Offringa’s [aoflagger](http://aoflagger.sourceforge.net)
     on your MIRIAD datasets and then import the flags back into MIRIAD.
 
+The `mirtoms` tool has severe limitations and will only work with very simple
+MIRIAD datasets. It also probably gets various details wrong that will bite
+you in the millimeter regime, but not the centimeter regime where I work.
+`carmafiller` is more robust in both ways.
+
 
 Installation
 ============
@@ -31,9 +36,9 @@ Installation
 The `Makefile` is customized to my machine. Sorry. Compilation is
 extremely straightforward if you can get the simultaneous linking with both
 MIRIAD and CASA libraries to work. If you're lucky, you should be able to
-build with just::
+build with just:
 
-   make MIR=/path/to/miriad CASACORE=/path/to/casacore
+    make MIR=/path/to/miriad CASACORE=/path/to/casacore
 
 
 License and Copyright Information
