@@ -50,6 +50,8 @@ pointings, etc., before we can actually start writing everything out.
 
 #define WARN(message) (cerr << "warning: " << message << endl);
 
+const char *MIR_REC_COL = "MIRIAD_RECNUM";
+
 
 typedef struct window {
     // CASA defines everything mid-band, mid-interval
@@ -358,6 +360,8 @@ Converter::setupMeasurementSet (const String& ms_path)
     MeasurementSet ms (newtab, lock);
     Table::TableOption option = Table::New;
 
+    ms.addColumn (ScalarColumnDesc<Int> (MIR_REC_COL, "Originating MIRIAD record number"));
+
     ms.createDefaultSubtables (option);
 
     ms.spectralWindow ().addColumn (ArrayColumnDesc<Int>(
@@ -389,7 +393,7 @@ Converter::setupMeasurementSet (const String& ms_path)
     SetupNewTable syscalSetup (ms.sysCalTableName (), syscalDesc, option);
     ms.rwKeywordSet ().defineTable (MS::keywordName (MS::SYSCAL), Table (syscalSetup));
 
-    ms.initRefs(); // update the references to the subtable keywords
+    ms.initRefs (); // "update the references to the subtable keywords"
 
     {
 	// Set the TableInfo. I'm assuming that the braces are to trigger a destructor.
@@ -446,6 +450,8 @@ void
 Converter::fillMSMainTable (Int snumbase)
 {
     MSColumns& msc (*msc_p);
+    ScalarColumn<Int> mirreccol (ms_p, MIR_REC_COL);
+
     Int nCorr = npol_p;
     Int nChan = nchan_p;
     Int nCat  = 3; // number of flagging categories
@@ -469,7 +475,7 @@ Converter::fillMSMainTable (Int snumbase)
     nAnt_p[0] = 0;
 
     receptorAngle_p.resize (1);
-    Int recnum, row = -1;
+    Int recnum, row = -1, polstartrecnum;
     int polsleft = 0;
     Double interval;
     Bool lastRowFlag = False;
@@ -529,6 +535,7 @@ Converter::fillMSMainTable (Int snumbase)
 
 	    flag = 1; // clear all, in case current npol != nCorr
 	    vis = 0;
+	    polstartrecnum = recnum;
 	}
 
 	int mirpol;
@@ -590,7 +597,7 @@ Converter::fillMSMainTable (Int snumbase)
 		msc.exposure ().put (row, interval);
 		msc.interval ().put (row, interval);
 
-		// Copying all of the data!
+		// XXX: we're re-copying all of the data!
 
 		Matrix<Complex> tvis (nCorr, win.nschan[ifno]);
 		Cube<Bool> tflagCat (nCorr, win.nschan[ifno], nCat, False);
@@ -642,6 +649,7 @@ Converter::fillMSMainTable (Int snumbase)
 
 		ifield_old = ifield;
 		msc.scanNumber ().put (row, iscan);
+		mirreccol.put (row, polstartrecnum);
 	    }
 	}
     }
