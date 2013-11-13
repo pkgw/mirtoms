@@ -8,6 +8,7 @@
 
 /*
   A *very* incomplete list of deficiencies and TODOs:
+  - we assume a single spectral window
   - we ignore "wide" channels
   - option to 'or' in flags instead of straight copying
 */
@@ -153,6 +154,7 @@ extract_flags (String& mspath, String& vispath)
     int flags[MYMAXCHAN];
     Matrix<Bool> msflags(0,0);
     uInt cur_pol_cfg;
+    Int nchan = -1;
 
     while (1) {
 	/* As far as I know, we need to actually read the UV data and friends,
@@ -161,6 +163,13 @@ extract_flags (String& mspath, String& vispath)
 	uvread_c (mirhandle, preamble, data, flags, MYMAXCHAN, &nread);
 	if (nread <= 0)
 	    break;
+
+	if (nchan < 0)
+	    nchan = nread; // XXX sketchy.
+	else if (nchan != nread)
+	    throw AipsError ("cannot handle varying number of channels; was " +
+			     String::toString (nchan) + "; now " +
+			     String::toString (nread));
 
 	if (polsleft == 0) {
 	    /* We just started a new simultaneous polarization record. We need
@@ -183,6 +192,8 @@ extract_flags (String& mspath, String& vispath)
 	    row++; // next time, next row.
 	}
 
+	// Loop core is easy. Get pol, look up flag info, write to MIRIAD.
+
 	int mirpol;
 	uvrdvr_c (mirhandle, H_INT, "pol", (char *) &mirpol, NULL, 1);
 
@@ -197,6 +208,16 @@ extract_flags (String& mspath, String& vispath)
 			     " has no data corresponding to MIRIAD polarization code " +
 			     String::toString (mirpol));
 
+	if (msflags.shape ()(1) != nchan)
+	    throw AipsError ("disagreeing numbers of channels; MIRIAD expects " +
+			     String::toString (nchan) + ", while CASA has " +
+			     String::toString (msflags.shape ()(1)));
+
+	for (Int i = 0; i < nchan; i++)
+	    // CASA and MIRIAD flag truthiness conventions differ.
+	    flags[i] = !msflags(mspolidx,i);
+
+	uvflgwr_c (mirhandle, flags);
 	recnum++;
 	polsleft--;
     }
