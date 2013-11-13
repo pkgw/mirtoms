@@ -137,6 +137,13 @@ extract_flags (String& mspath, String& vispath)
 	}
     }
 
+    // OK, it looks like we can actually do this.
+
+    hisopen_c (mirhandle, "append");
+    hiswrite_c (mirhandle, "MIRMSFLAGEXTRACT: import flags from an exported MeasurementSet");
+    hiswrite_c (mirhandle,
+		("MIRMSFLAGEXTRACT: vis=" + vispath + " ms=" + mspath).chars ());
+
     /* Start charging through. CASA stores multiple polarization records in one
        logical row, while MIRIAD separates out the records. So we read a CASA row
        first, save the data, and apply it to 1-4 MIRIAD records. Our iteration is
@@ -224,6 +231,9 @@ extract_flags (String& mspath, String& vispath)
 
     // Wrap up.
 
+    hiswrite_c (mirhandle, ("MIRMSFLAGEXTRACT: processed " + String::toString (recnum) +
+			    " records").chars ());
+    hisclose_c (mirhandle);
     uvclose_c (mirhandle);
 }
 
