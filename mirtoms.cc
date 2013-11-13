@@ -565,9 +565,15 @@ Converter::fillMSMainTable (Int snumbase)
 
 	polsleft--;
 
-	if (polsleft == 0 && !allTrue (flag)) {
-	    // Done with this set of simultaneous pols, and not all flagged.
-	    // CASA "IF" is our "spectral window" concept.
+	if (polsleft == 0) {
+	    /* Done with this set of simultaneous pols. carmafiller won't
+	       write a row if it's all flagged, but we do that to maintain
+	       synchronization with MIRIAD records, which allows
+	       mirmsflagextract to have simple sanity-checking logic. If we
+	       really wanted to save the disk space, we could stash a list of
+	       "omitted MIRIAD recnums" somewhere in the MS that
+	       mirmsflagextract could walk through while reading the data.
+	    */
 
 	    for (Int ifno = 0; ifno < win.nspect; ifno++) {
 		// IFs go to separate rows in the MS, pol's do not!
