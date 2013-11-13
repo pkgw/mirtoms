@@ -100,21 +100,15 @@ extract_flags (String& mspath, String& vispath)
     // Open the MIRIAD dataset.
 
     int mirhandle;
-
     uvopen_c (&mirhandle, vispath.chars (), "old");
     uvset_c (mirhandle, "preamble", "uvw/time/baseline", 0, 0.0, 0.0, 0.0);
 
     // Open the CASA dataset and load up the polarization/data-desc-id info.
     // We build a table that lets us quickly map from MIRIAD polarization
-    // value to the row that we need to look at. We could get even faster by
-    // precomputing the ddid-to-polid lookup, but that's a teeny tiny
-    // optimization that no one cares about.
+    // value to the row that we need to look at.
 
     MeasurementSet ms (mspath, Table::Old);
     MSColumns msc (ms);
-    ScalarColumn<Int> mirreccol (ms, MIR_REC_COL);
-    ScalarColumn<Int> ddcol (ms, MS::columnName (MS::DATA_DESC_ID));
-    ArrayColumn<bool> msflagcol (ms, MS::columnName (MS::FLAG));
 
     Vector<Int> ddid_to_polid = msc.dataDescription ().polarizationId ().getColumn ();
 
@@ -129,11 +123,11 @@ extract_flags (String& mspath, String& vispath)
 	for (uInt i = 0; i < num_polcfg; i++) {
 	    ctcol.get (i, corrtype, True);
 
-	    for (uInt j = 0; j < corrtype.shape ().size (); j++) {
+	    for (uInt j = 0; j < corrtype.size (); j++) {
 		int mirpol = mspol_to_mir[corrtype[j]];
 		if (mirpol == MP_invalid) {
 		    WARN ("MS " + mspath + " contains records with surprising "
-			  "polarization codes " + String::toString (corrtype[j]));
+			  "polarization code " + String::toString (corrtype[j]));
 		    continue;
 		}
 
@@ -148,12 +142,17 @@ extract_flags (String& mspath, String& vispath)
        all driven by the MIRIAD dataset, though.
     */
 
+    ScalarColumn<Int> mirreccol (ms, MIR_REC_COL);
+    ScalarColumn<Int> ddcol (ms, MS::columnName (MS::DATA_DESC_ID));
+    ArrayColumn<bool> msflagcol (ms, MS::columnName (MS::FLAG));
+
     Int recnum = 0, row = 0;
     int polsleft = 0;
     double preamble[5];
     float data[2 * MYMAXCHAN]; // complex, so 2 floats per channel
     int flags[MYMAXCHAN];
     Matrix<Bool> msflags(0,0);
+    uInt cur_pol_cfg;
 
     while (1) {
 	/* As far as I know, we need to actually read the UV data and friends,
@@ -179,11 +178,24 @@ extract_flags (String& mspath, String& vispath)
 				 String::toString (msrecnum));
 
 	    msflagcol.get (row, msflags, True); // resizes on-the-fly
+	    cur_pol_cfg = ddid_to_polid[ddcol.get (row)];
+
 	    row++; // next time, next row.
 	}
 
 	int mirpol;
 	uvrdvr_c (mirhandle, H_INT, "pol", (char *) &mirpol, NULL, 1);
+
+	Int mspolidx = pol_indices(cur_pol_cfg,mirpol+MP_offset);
+	if (mspolidx < 0)
+	    throw AipsError ("polarization mapping failure at MIRIAD record #" +
+			     String::toString (recnum) +
+			     " (0-based) and CASA row #" +
+			     String::toString (row) +
+			     " (0-based): MS polId #" +
+			     String::toString (cur_pol_cfg) +
+			     " has no data corresponding to MIRIAD polarization code " +
+			     String::toString (mirpol));
 
 	recnum++;
 	polsleft--;
