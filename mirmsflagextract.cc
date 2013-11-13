@@ -42,6 +42,50 @@
 #define MYMAXCHAN 8192 // I feel so dirty.
 #define WARN(message) (cerr << "warning: " << message << endl);
 
+enum _miriad_polarizations {
+    // I don't think these are exported in the C headers?
+    //
+    // The doubled letters are MIRIAD's convention for various Stokes
+    // parameters making assumptions.
+    MP_II = 0,
+    MP_I = 1,
+    MP_Q = 2,
+    MP_U = 3,
+    MP_V = 4,
+    MP_RR = -1,
+    MP_LL = -2,
+    MP_RL = -3,
+    MP_LR = -4,
+    MP_XX = -5,
+    MP_YY = -6,
+    MP_XY = -7,
+    MP_YX = -8,
+    MP_QQ = 5,
+    MP_UU = 6,
+    MP_offset = 8,
+    MP_num = 15,
+    MP_invalid = -9,
+};
+
+enum _miriad_polarizations mspol_to_mir[] = {
+    MP_invalid, // Stokes::Undefined
+    MP_I, MP_Q, MP_U, MP_V,
+    MP_RR, MP_RL, MP_LR, MP_LL,
+    MP_XX, MP_XY, MP_YX, MP_YY,
+    // Stokes::RX through LY:
+    MP_invalid, MP_invalid, MP_invalid, MP_invalid,
+    // Stokes::XR through YL:
+    MP_invalid, MP_invalid, MP_invalid, MP_invalid,
+    // Stokes::PP through QQ:
+    MP_invalid, MP_invalid, MP_invalid, MP_invalid,
+    // Stokes::RCircular, LCircular, Linear,
+    MP_invalid, MP_invalid, MP_invalid,
+    // Stokes::Ptotal, Plinear, PFtotal, PFlinear
+    MP_invalid, MP_invalid, MP_invalid, MP_invalid,
+    // Stokes::Pangle
+    MP_invalid,
+};
+
 const char *MIR_REC_COL = "MIRIAD_RECNUM";
 
 
@@ -60,11 +104,43 @@ extract_flags (String& mspath, String& vispath)
     uvopen_c (&mirhandle, vispath.chars (), "old");
     uvset_c (mirhandle, "preamble", "uvw/time/baseline", 0, 0.0, 0.0, 0.0);
 
-    // Open the CASA dataset.
+    // Open the CASA dataset and load up the polarization/data-desc-id info.
+    // We build a table that lets us quickly map from MIRIAD polarization
+    // value to the row that we need to look at. We could get even faster by
+    // precomputing the ddid-to-polid lookup, but that's a teeny tiny
+    // optimization that no one cares about.
 
     MeasurementSet ms (mspath, Table::Old);
     MSColumns msc (ms);
     ScalarColumn<Int> mirreccol (ms, MIR_REC_COL);
+    ScalarColumn<Int> ddcol (ms, MS::columnName (MS::DATA_DESC_ID));
+    ArrayColumn<bool> msflagcol (ms, MS::columnName (MS::FLAG));
+
+    Vector<Int> ddid_to_polid = msc.dataDescription ().polarizationId ().getColumn ();
+
+    uInt num_polcfg = ms.polarization ().nrow ();
+    Matrix<Int> pol_indices(num_polcfg,MP_num);
+    pol_indices = -1; // mark all as invalid.
+
+    {
+	Vector<Int> corrtype;
+	ArrayColumn<int> ctcol = MSPolarizationColumns (ms.polarization ()).corrType ();
+
+	for (uInt i = 0; i < num_polcfg; i++) {
+	    ctcol.get (i, corrtype, True);
+
+	    for (uInt j = 0; j < corrtype.shape ().size (); j++) {
+		int mirpol = mspol_to_mir[corrtype[j]];
+		if (mirpol == MP_invalid) {
+		    WARN ("MS " + mspath + " contains records with surprising "
+			  "polarization codes " + String::toString (corrtype[j]));
+		    continue;
+		}
+
+		pol_indices(i,mirpol + MP_offset) = j;
+	    }
+	}
+    }
 
     /* Start charging through. CASA stores multiple polarization records in one
        logical row, while MIRIAD separates out the records. So we read a CASA row
@@ -77,6 +153,7 @@ extract_flags (String& mspath, String& vispath)
     double preamble[5];
     float data[2 * MYMAXCHAN]; // complex, so 2 floats per channel
     int flags[MYMAXCHAN];
+    Matrix<Bool> msflags(0,0);
 
     while (1) {
 	/* As far as I know, we need to actually read the UV data and friends,
@@ -87,7 +164,9 @@ extract_flags (String& mspath, String& vispath)
 	    break;
 
 	if (polsleft == 0) {
-	    // We just started a new simultaneous polarization record.
+	    /* We just started a new simultaneous polarization record. We need
+	     * to read in the next chunk of flags from the MS, taking care to
+	     * check sanity. */
 	    uvrdvr_c (mirhandle, H_INT, "npol", (char *) &polsleft, NULL, 1);
 
 	    Int msrecnum = mirreccol.get (row);
@@ -99,6 +178,7 @@ extract_flags (String& mspath, String& vispath)
 				 " (0-based): should be at MIRIAD record #" +
 				 String::toString (msrecnum));
 
+	    msflagcol.get (row, msflags, True); // resizes on-the-fly
 	    row++; // next time, next row.
 	}
 
